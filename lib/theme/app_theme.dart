@@ -5,10 +5,16 @@ class AppTheme {
   AppTheme._();
 
   /// Light theme, built from the Catppuccin Latte flavor.
-  static final ThemeData light = _build(CatppuccinPalette.latte, Brightness.light);
+  static final ThemeData light = _build(
+    CatppuccinPalette.latte,
+    Brightness.light,
+  );
 
   /// Dark theme, built from the Catppuccin Mocha flavor.
-  static final ThemeData dark = _build(CatppuccinPalette.mocha, Brightness.dark);
+  static final ThemeData dark = _build(
+    CatppuccinPalette.mocha,
+    Brightness.dark,
+  );
 
   static ThemeData _build(CatppuccinPalette p, Brightness brightness) {
     final isDark = brightness == Brightness.dark;
@@ -54,11 +60,7 @@ class AppTheme {
       brightness: brightness,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: p.base,
-      appBarTheme: AppBarTheme(
-        backgroundColor: p.mantle,
-        foregroundColor: p.text,
-        elevation: 0,
-      ),
+      appBarTheme: AppBarTheme(backgroundColor: p.mantle, elevation: 0),
     );
   }
 }
