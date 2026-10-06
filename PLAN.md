@@ -120,13 +120,28 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 
 | Phase | Packages |
 |---|---|
-| 0 | forui, flutter_riverpod |
+| 0 | forui, flutter_riverpod, material_ui |
 | 2 | uuid, intl |
 | 4 | flutter_markdown |
 | 5 | url_launcher |
 | 8 | http, shared_preferences |
 | 9 | drift, sqlite3_flutter_libs, path_provider, path; dev: drift_dev, build_runner |
 | 10 | (reuses http) |
+
+## Status
+
+- [x] Phase 0 - Bootstrap ForUI + Riverpod
+- [ ] Phase 1 - App shell: tabs, navigation, theme toggle
+- [ ] Phase 2 - Core models, mock repositories, Home dashboard
+- [ ] Phase 3 - Todo
+- [ ] Phase 4 - Notes
+- [ ] Phase 5 - Links (core)
+- [ ] Phase 6 - Work Log
+- [ ] Phase 7 - Projects (week Gantt)
+- [ ] Phase 8 - Enrichment: link metadata + persisted settings + empty states
+- [ ] Phase 9 - Drift persistence
+- [ ] Phase 10 - Turso sync
+- [ ] Phase 11 - Polish + APK
 
 ## Phases
 
@@ -137,8 +152,9 @@ Goal: clean slate, ForUI app skeleton runs.
 Scope:
 - Verify `flutter --version` is 3.44+ (ForUI 0.22+ requirement); upgrade Flutter first if not.
 - Delete lib/theme/ and lib/pages/; rewrite lib/main.dart.
-- `flutter pub add forui flutter_riverpod`.
+- `flutter pub add forui flutter_riverpod material_ui`.
 - main.dart: ProviderScope -> MaterialApp (supportedLocales + localizationsDelegates per ForUI docs) -> builder wrapping FTheme (FTheme.neutral.light.touch / dark.touch) -> FToaster -> FTooltipGroup; Material theme via toApproximateMaterialTheme(); home is a placeholder FScaffold with one FButton.
+- material_ui is a required direct companion of ForUI, not a transitive detail: ForUI 0.27.x targets the standalone `material_ui` package, so `toApproximateMaterialTheme()` returns `material_ui.ThemeData`. main.dart must import `package:material_ui/material_ui.dart` (importing `package:flutter/material.dart` does not type-check), and relying on the transitive dependency would trip the `depend_on_referenced_packages` lint. Declaring it directly keeps `flutter analyze` clean.
 
 Key files: pubspec.yaml, lib/main.dart.
 

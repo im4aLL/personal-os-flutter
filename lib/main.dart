@@ -1,30 +1,53 @@
-import 'package:flutter/material.dart';
-import 'package:personal_os_flutter/pages/home_page.dart';
-import 'package:personal_os_flutter/theme/app_theme.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:forui/forui.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
-  runApp(const MainApp());
+  runApp(const ProviderScope(child: PersonalOsApp()));
 }
 
-class MainApp extends StatefulWidget {
-  const MainApp({super.key});
-
-  @override
-  State<MainApp> createState() => _MainAppState();
-}
-
-class _MainAppState extends State<MainApp> {
-  // Becomes mutable (and drives setState) once the theme toggle lands.
-  final ThemeMode _themeMode = ThemeMode.system;
+/// Root of the Personal OS app.
+///
+/// Wires the Riverpod scope around a Material host shell, then layers the
+/// Forui theme, toaster, and tooltip group on top of every route.
+class PersonalOsApp extends StatelessWidget {
+  const PersonalOsApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      themeMode: _themeMode,
-      theme: AppTheme.dark,
-      darkTheme: AppTheme.dark,
-      home: const HomePage(),
+      supportedLocales: FLocalizations.supportedLocales,
+      localizationsDelegates: FLocalizations.localizationsDelegates,
+      theme: FTheme.neutral.light.touch.toApproximateMaterialTheme(),
+      darkTheme: FTheme.neutral.dark.touch.toApproximateMaterialTheme(),
+      // Default behavior; Phase 1 drives this from a Riverpod provider.
+      themeMode: ThemeMode.system,
+      builder: (context, child) => FTheme(
+        data: Theme.brightnessOf(context) == Brightness.light
+            ? FTheme.neutral.light.touch
+            : FTheme.neutral.dark.touch,
+        child: FToaster(child: FTooltipGroup(child: child!)),
+      ),
+      home: const _HomePage(),
+    );
+  }
+}
+
+/// Phase 0 placeholder home screen.
+class _HomePage extends StatelessWidget {
+  const _HomePage();
+
+  @override
+  Widget build(BuildContext context) {
+    return FScaffold(
+      child: Center(
+        child: FButton(
+          mainAxisSize: MainAxisSize.min,
+          onPress: () {},
+          child: const Text('Personal OS'),
+        ),
+      ),
     );
   }
 }
