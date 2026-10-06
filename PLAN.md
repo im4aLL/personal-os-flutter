@@ -131,7 +131,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 ## Status
 
 - [x] Phase 0 - Bootstrap ForUI + Riverpod
-- [ ] Phase 1 - App shell: tabs, navigation, theme toggle
+- [x] Phase 1 - App shell: tabs, navigation, theme toggle
 - [ ] Phase 2 - Core models, mock repositories, Home dashboard
 - [ ] Phase 3 - Todo
 - [ ] Phase 4 - Notes
