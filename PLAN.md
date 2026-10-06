@@ -8,10 +8,10 @@ Mobile port of the Personal OS desktop app (Tauri/React, reference at ../persona
 |---|---|
 | UI kit | ForUI (FTheme.neutral light/dark .touch); Material only as host shell |
 | State | flutter_riverpod, handwritten providers (no riverpod_generator); repository interfaces behind providers; one Notifier/AsyncNotifier per feature screen |
-| Navigation | 5 bottom tabs: Home, Todo, Notes, More, Settings. More hosts Links / Work Log / Projects as entries pushing full-screen routes via the root Navigator |
+| Navigation | 5 bottom tabs: Home, Todo, Notes, More, Settings. More hosts Links / Work Log / Projects as entries pushing onto the shell's inner Navigator (nested `Navigator` + `NavigatorPopHandler`) so the bottom bar stays visible |
 | Persistence (Phase 9) | drift, schema mirrors ../personal-os/src/lib/schema.ts (the remote Turso schema) column-for-column |
 | Sync (Phase 10) | Turso via libSQL HTTP API; bidirectional last-write-wins on updated_at; local DB is source of truth |
-| Tests | No broad suite. Targeted high-value tests only: clock/timestamp format, schema conformance vs schema.ts (node script), sync merge (LWW + pending_deletes). Otherwise verification = flutter run / release APK + manual inspection; flutter analyze must stay clean |
+| Tests | No broad suite. Targeted high-value tests only: clock/timestamp format, schema conformance vs schema.ts (node script), sync merge (LWW + pending_deletes), plus the Phase 2 Home stream-wiring widget test and the stream-combination test. Otherwise verification = flutter run / release APK + manual inspection; flutter analyze must stay clean |
 | Theme | Follow system by default; manual System/Light/Dark toggle in Settings (in-memory until Phase 8) |
 
 ## Architecture
@@ -61,9 +61,9 @@ lib/
       mock/                      # mock_todo_repository.dart, ... with seeded fake data
       drift/                     # (Phase 9) database.dart, tables.dart, drift_*_repository.dart
     sync/                        # (Phase 10) turso_client.dart, sync_engine.dart
-    utils/                       # dates.dart (ISO week keys, YYYY-MM-DD), id.dart (uuid), clock.dart (ms-precision ISO timestamps)
+    utils/                       # dates.dart (ISO week keys, YYYY-MM-DD), id.dart (uuid), clock.dart (ms-precision ISO timestamps), streams.dart (stream combination)
   features/
-    home/       ui/home_page.dart        providers/
+    home/       ui/home_page.dart + dashboard widget files   providers/
     todo/       ui/todo_page.dart, todo_edit_sheet.dart      providers/
     notes/      ui/notes_page.dart, note_editor_page.dart    providers/
     links/      ui/links_page.dart, link_edit_sheet.dart     providers/
@@ -71,11 +71,11 @@ lib/
     projects/   ui/projects_page.dart, project_gantt.dart, work_item_dialog.dart  providers/
     more/       ui/more_page.dart
     settings/   ui/settings_page.dart    providers/
-test/                             # targeted tests: clock/timestamp, sync merge
+test/                             # targeted tests: clock/timestamp, Home stream wiring, stream combination, project repository, tag-timestamp semantics (sync merge in Phase 10)
 tool/                             # schema_conformance.js (diffs schema.ts vs drift schema + remote-DDL port)
 ```
 
-Feature-first: each feature owns ui/ + providers/; shared code lives in core/. test/ holds only the targeted high-value tests (clock/timestamp, sync merge); tool/schema_conformance.js is the automated schema-drift guard.
+Feature-first: each feature owns ui/ + providers/; shared code lives in core/. test/ holds only the targeted high-value tests (clock/timestamp, the Phase 2 Home stream-wiring and stream-combination tests, and the Phase 10 sync merge tests); tool/schema_conformance.js is the automated schema-drift guard.
 
 ## Data model (mirrors ../personal-os/src/lib/schema.ts)
 
@@ -132,7 +132,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 
 - [x] Phase 0 - Bootstrap ForUI + Riverpod
 - [x] Phase 1 - App shell: tabs, navigation, theme toggle
-- [ ] Phase 2 - Core models, mock repositories, Home dashboard
+- [x] Phase 2 - Core models, mock repositories, Home dashboard
 - [ ] Phase 3 - Todo
 - [ ] Phase 4 - Notes
 - [ ] Phase 5 - Links (core)
@@ -343,4 +343,4 @@ Done when: release APK installs on the phone and all features work offline; sync
 - InMemoryStore must use a broadcast StreamController; a single-subscription stream breaks the second listener (dashboard + feature page).
 - Tag edits are insert-only (delete all + re-insert on save) to match the reference schema and keep sync simple.
 - Offline tag and phase edits do not fully converge: tags are insert-only with no tombstones, so an offline tag edit (delete-all + re-insert) leaves stale tags that resurrect on pull; project_phases has no updated_at and no tombstone, and phase edits/deletes rely on immediate remote mirroring that is silently dropped offline. Matches the desktop app; treat tag and phase edits as best-effort when offline. Accepted decision: the schema freeze rules out adding tombstones/updated_at, so this parity is intended, not a gap.
-- No broad unit-test suite is deliberate; the three highest-risk areas (timestamp format, schema conformance, sync merge) get targeted tests, and everything else is compensated with analyze-clean plus the per-phase Done-when checklist executed manually on every phase.
+- No broad unit-test suite is deliberate; the targeted high-value areas get tests - clock/timestamp, schema conformance, Home stream wiring, stream combination, and tag-timestamp semantics, plus sync merge in Phase 10 - and everything else is compensated with analyze-clean plus the per-phase Done-when checklist executed manually on every phase.

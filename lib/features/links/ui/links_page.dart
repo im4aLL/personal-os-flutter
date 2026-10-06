@@ -1,23 +1,15 @@
+import 'package:flutter/widgets.dart';
 import 'package:forui/forui.dart';
-import 'package:material_ui/material_ui.dart';
 
-/// Links page, pushed full-screen from the More tab.
+/// Links page, pushed over the shell from the More tab.
 class LinksPage extends StatelessWidget {
   const LinksPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return FScaffold(
-      header: FHeader.nested(
-        prefixes: [
-          FHeaderAction(
-            icon: const Icon(Icons.arrow_back),
-            onPress: () => Navigator.maybePop(context),
-          ),
-        ],
-        title: const Text('Links'),
-      ),
-      child: const FCard(
+    return const FScaffold(
+      header: FHeader(title: Text('Links')),
+      child: FCard(
         child: Padding(
           padding: EdgeInsets.all(16),
           child: Text(
