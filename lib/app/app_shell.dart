@@ -32,6 +32,11 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return FScaffold(
+      // Inner page scaffolds own their own padding and keyboard insets, so the
+      // shell must not apply either at this level (avoids double padding and a
+      // doubled bottom inset under the keyboard). Matches the pushed More routes.
+      childPad: false,
+      resizeToAvoidBottomInset: false,
       footer: FBottomNavigationBar(
         index: _selectedIndex,
         onChange: (index) => setState(() => _selectedIndex = index),

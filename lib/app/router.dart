@@ -18,7 +18,7 @@ abstract final class AppRoutes {
   static const projects = '/projects';
 
   /// The route table registered on the [MaterialApp].
-  static Map<String, WidgetBuilder> get routes => {
+  static final Map<String, WidgetBuilder> routes = {
     links: (_) => const LinksPage(),
     workLog: (_) => const WorkLogPage(),
     projects: (_) => const ProjectsPage(),

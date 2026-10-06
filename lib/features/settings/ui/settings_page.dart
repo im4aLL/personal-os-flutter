@@ -37,7 +37,7 @@ class SettingsPage extends ConsumerWidget {
       title: Text(label),
       suffix: selected ? const Icon(Icons.check) : null,
       selected: selected,
-      onPress: () => ref.read(themeModeProvider.notifier).mode = mode,
+      onPress: () => ref.read(themeModeProvider.notifier).select(mode),
     );
   }
 }

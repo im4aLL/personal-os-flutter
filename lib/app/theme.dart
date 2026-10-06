@@ -19,6 +19,10 @@ final ThemeData darkMaterialTheme = darkTheme.toApproximateMaterialTheme();
 /// The plan describes this as a `StateProvider<ThemeMode>`. In Riverpod 3
 /// `StateProvider` moved to the legacy library, so it is expressed here as a
 /// [Notifier] while keeping the same single-value, in-memory behavior.
+///
+/// `StateProvider` is still available via the legacy import
+/// (`package:flutter_riverpod/legacy.dart`), so using a [Notifier] here is a
+/// deliberate preference rather than a forced migration.
 final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
   ThemeModeNotifier.new,
 );
@@ -31,5 +35,5 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
   /// Updates the selected [mode].
   ///
   /// In-memory only; Phase 8 persists the choice via shared_preferences.
-  set mode(ThemeMode mode) => state = mode;
+  void select(ThemeMode mode) => state = mode;
 }
