@@ -8,6 +8,7 @@ import '../../../core/data/repository_providers.dart';
 import '../../../core/models/todo.dart';
 import '../../../core/utils/dates.dart';
 import '../providers/todo_providers.dart';
+import 'todo_presentation.dart';
 
 /// Read-only single-todo page opened from the Home dashboard.
 ///
@@ -59,9 +60,8 @@ class _TodoDetail extends ConsumerWidget {
     final overdue =
         !completed && dueDate != null && dueDate.compareTo(todayDate()) < 0;
 
-    void setStatus(TodoStatus status) => unawaited(
-      ref.read(todoRepositoryProvider).setStatus(todo.id, status),
-    );
+    void setStatus(TodoStatus status) =>
+        unawaited(ref.read(todoRepositoryProvider).setStatus(todo.id, status));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
@@ -72,13 +72,13 @@ class _TodoDetail extends ConsumerWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             FBadge(
-              variant: _statusVariant(todo.status),
-              child: Text(_statusLabel(todo.status)),
+              variant: statusVariant(todo.status),
+              child: Text(statusLabel(todo.status)),
             ),
             if (todo.priority != null)
               FBadge(
-                variant: _priorityVariant(todo.priority!),
-                child: Text(_priorityLabel(todo.priority!)),
+                variant: priorityVariant(todo.priority!),
+                child: Text(priorityLabel(todo.priority!)),
               ),
           ],
         ),
@@ -112,7 +112,8 @@ class _TodoDetail extends ConsumerWidget {
             ],
           ),
         ),
-        if (todo.description != null && todo.description!.trim().isNotEmpty) ...[
+        if (todo.description != null &&
+            todo.description!.trim().isNotEmpty) ...[
           const SizedBox(height: 20),
           _SectionTitle('Description'),
           const SizedBox(height: 8),
@@ -186,7 +187,9 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: context.theme.typography.body.lg.copyWith(fontWeight: FontWeight.w600),
+    style: context.theme.typography.body.lg.copyWith(
+      fontWeight: FontWeight.w600,
+    ),
   );
 }
 
@@ -210,31 +213,3 @@ class _CenteredMessage extends StatelessWidget {
     ),
   );
 }
-
-/// The [FBadge] variant that conveys [status].
-FBadgeVariant _statusVariant(TodoStatus status) => switch (status) {
-  TodoStatus.todo => FBadgeVariant.secondary,
-  TodoStatus.inProgress => FBadgeVariant.primary,
-  TodoStatus.completed => FBadgeVariant.outline,
-};
-
-/// A human label for [status].
-String _statusLabel(TodoStatus status) => switch (status) {
-  TodoStatus.todo => 'To do',
-  TodoStatus.inProgress => 'In progress',
-  TodoStatus.completed => 'Completed',
-};
-
-/// The [FBadge] variant that conveys [priority].
-FBadgeVariant _priorityVariant(TodoPriority priority) => switch (priority) {
-  TodoPriority.high => FBadgeVariant.destructive,
-  TodoPriority.medium => FBadgeVariant.primary,
-  TodoPriority.low => FBadgeVariant.secondary,
-};
-
-/// A human label for [priority].
-String _priorityLabel(TodoPriority priority) => switch (priority) {
-  TodoPriority.high => 'High',
-  TodoPriority.medium => 'Medium',
-  TodoPriority.low => 'Low',
-};

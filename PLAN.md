@@ -133,7 +133,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 - [x] Phase 0 - Bootstrap ForUI + Riverpod
 - [x] Phase 1 - App shell: tabs, navigation, theme toggle
 - [x] Phase 2 - Core models, mock repositories, Home dashboard
-- [ ] Phase 3 - Todo
+- [x] Phase 3 - Todo
 - [ ] Phase 4 - Notes
 - [ ] Phase 5 - Links (core)
 - [ ] Phase 6 - Work Log
@@ -204,7 +204,7 @@ Scope:
 - Per-status add (button opens edit sheet preset to that status); edit via FSheet: FTextFormField title + description, priority select, FDateField due date.
 - Item menu actions: move status, archive (soft delete), delete (confirm FDialog), Add to work log (creates entry via WorkLogRepository with today as start/end and the todo title; toast confirms).
 - Search FTextField filtering all tabs; Archived view behind a header action.
-- TodoNotifier (AsyncNotifier) holding query + filters.
+- TodoNotifier (Notifier) holding query + filters.
 
 Done when: create/edit/complete/archive/delete/search all work against mock data and survive tab switches; Add to work log shows a confirmation toast; analyze clean.
 

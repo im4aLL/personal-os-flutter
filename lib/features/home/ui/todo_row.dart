@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../core/models/todo.dart';
 import '../../../core/utils/dates.dart';
+import '../../todo/ui/todo_presentation.dart';
 
 /// One tappable todo row that opens the single-todo detail page.
 ///
@@ -58,8 +59,8 @@ class TodoRow extends StatelessWidget {
                       children: [
                         if (priority != null)
                           FBadge(
-                            variant: _priorityVariant(priority),
-                            child: Text(_priorityLabel(priority)),
+                            variant: priorityVariant(priority),
+                            child: Text(priorityLabel(priority)),
                           ),
                         if (todo.dueDate != null)
                           Text(
@@ -93,17 +94,3 @@ class TodoRow extends StatelessWidget {
     );
   }
 }
-
-/// The [FBadge] variant that conveys [priority].
-FBadgeVariant _priorityVariant(TodoPriority priority) => switch (priority) {
-  TodoPriority.high => FBadgeVariant.destructive,
-  TodoPriority.medium => FBadgeVariant.primary,
-  TodoPriority.low => FBadgeVariant.secondary,
-};
-
-/// A human label for [priority].
-String _priorityLabel(TodoPriority priority) => switch (priority) {
-  TodoPriority.high => 'High',
-  TodoPriority.medium => 'Medium',
-  TodoPriority.low => 'Low',
-};
