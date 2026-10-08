@@ -2,8 +2,8 @@ import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/utils/dates.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../providers/home_providers.dart';
-import 'empty_state.dart';
 
 /// Merged recent-activity list.
 class RecentActivityList extends StatelessWidget {
@@ -14,7 +14,7 @@ class RecentActivityList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return const EmptyState('No activity yet.');
+      return const AppEmptyState('No activity yet.');
     }
 
     return FTileGroup(

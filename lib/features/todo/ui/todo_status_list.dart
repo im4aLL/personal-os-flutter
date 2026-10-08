@@ -3,31 +3,19 @@ import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/models/todo.dart';
+import '../../../core/widgets/centered_message.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../providers/todo_providers.dart';
 import 'todo_card.dart';
-import 'todo_edit_sheet.dart';
-import 'todo_empty_list.dart';
 
-/// One status tab: per-status add button plus the filtered todo cards.
+/// One status tab: the filtered todo cards.
+///
+/// New todos are created from the page-level floating add button, so this list
+/// is read-only and simply reflects the stream for its status.
 class TodoStatusList extends ConsumerWidget {
-  const TodoStatusList({
-    super.key,
-    required this.status,
-    required this.addLabel,
-  });
+  const TodoStatusList({super.key, required this.status});
 
   final TodoStatus status;
-  final String addLabel;
-
-  Future<void> _openAdd(BuildContext context, TodoStatus status) async {
-    final saved = await showTodoEditSheet(
-      context: context,
-      initialStatus: status,
-    );
-    if (saved && context.mounted) {
-      showFToast(context: context, title: const Text('Todo created'));
-    }
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,20 +27,14 @@ class TodoStatusList extends ConsumerWidget {
     return todos.when(
       skipLoadingOnReload: true,
       loading: () => const Center(child: FCircularProgress()),
-      error: (_, _) => const Center(child: Text('Could not load todos.')),
+      error: (_, _) => const CenteredMessage('Could not load todos.'),
       data: (items) => ListView(
-        // Horizontal inset comes from the outer tabs wrapper; keep vertical only.
-        padding: const EdgeInsets.fromLTRB(0, 4, 0, 32),
+        // Horizontal inset comes from the outer tabs wrapper; keep vertical
+        // only. Extra bottom padding clears the floating add button.
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 88),
         children: [
-          FButton(
-            variant: .outline,
-            prefix: const Icon(Icons.add),
-            onPress: () => _openAdd(context, status),
-            child: Text(addLabel),
-          ),
-          const SizedBox(height: 12),
           if (items.isEmpty)
-            TodoEmptyList(_emptyMessage(status, query))
+            AppEmptyState(_emptyMessage(status, query))
           else
             for (final todo in items)
               Padding(
@@ -70,7 +52,7 @@ class TodoStatusList extends ConsumerWidget {
     final needle = query.trim();
     if (needle.isNotEmpty) return 'No todos match "$needle".';
     return switch (status) {
-      TodoStatus.todo => 'No todos. Add one above.',
+      TodoStatus.todo => 'No todos yet. Tap + to add one.',
       TodoStatus.inProgress => 'Nothing in progress.',
       TodoStatus.completed => 'Nothing done yet.',
     };

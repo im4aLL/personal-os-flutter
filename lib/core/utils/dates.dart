@@ -66,8 +66,9 @@ String weekLabel(String dateStr, {DateTime? now}) {
 }
 
 /// Formats an ISO-8601 timestamp for display, converting to local time.
+/// Uses a 12-hour clock with an AM/PM marker, e.g. `Oct 5, 3:07 PM`.
 String formatDateTimeShort(String iso) =>
-    DateFormat('MMM d, HH:mm').format(DateTime.parse(iso).toLocal());
+    DateFormat('MMM d, h:mm a').format(DateTime.parse(iso).toLocal());
 
 /// Formats a `YYYY-MM-DD` date for display, e.g. `Oct 5`.
 String formatDateShort(String dateStr) =>

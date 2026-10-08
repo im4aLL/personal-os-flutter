@@ -2,9 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../core/widgets/centered_message.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../providers/todo_providers.dart';
 import 'todo_card.dart';
-import 'todo_empty_list.dart';
 
 /// Archived todos with restore + delete actions.
 class ArchivedTodoList extends ConsumerWidget {
@@ -21,13 +22,12 @@ class ArchivedTodoList extends ConsumerWidget {
     return todos.when(
       skipLoadingOnReload: true,
       loading: () => const Center(child: FCircularProgress()),
-      error: (_, _) =>
-          const Center(child: Text('Could not load archived todos.')),
+      error: (_, _) => const CenteredMessage('Could not load archived todos.'),
       data: (items) => ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
           if (items.isEmpty)
-            TodoEmptyList(
+            AppEmptyState(
               searching
                   ? 'No archived todos match "${query.trim()}".'
                   : 'No archived todos.',

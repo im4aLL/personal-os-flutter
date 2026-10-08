@@ -62,6 +62,7 @@ lib/
       drift/                     # (Phase 9) database.dart, tables.dart, drift_*_repository.dart
     sync/                        # (Phase 10) turso_client.dart, sync_engine.dart
     utils/                       # dates.dart (ISO week keys, YYYY-MM-DD), id.dart (uuid), clock.dart (ms-precision ISO timestamps), streams.dart (stream combination)
+    widgets/                     # shared UI helpers (empty state, centered message, delete dialog, padded card)
   features/
     home/       ui/home_page.dart + dashboard widget files   providers/
     todo/       ui/todo_page.dart, todo_edit_sheet.dart      providers/
@@ -134,7 +135,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 - [x] Phase 1 - App shell: tabs, navigation, theme toggle
 - [x] Phase 2 - Core models, mock repositories, Home dashboard
 - [x] Phase 3 - Todo
-- [ ] Phase 4 - Notes
+- [x] Phase 4 - Notes
 - [ ] Phase 5 - Links (core)
 - [ ] Phase 6 - Work Log
 - [ ] Phase 7 - Projects (week Gantt)
@@ -288,6 +289,7 @@ Scope:
 - DriftTodoRepository etc. implementing the same interfaces with drift queries and .watch() streams.
 - Swap provider bodies to drift impls (single localized diff); keep mock impls available for ProviderScope overrides (demos, widget previews).
 - Commit generated .g.dart files so checkouts build without running build_runner.
+- Harden the note editor's async failure/rollback semantics: the Phase 4 single-flight write queue assumes success, so once the repository can fail (drift constraint/lock/IO) a failed optimistic pin/tag write can diverge from the store; add convergence/rollback handling at that point.
 
 Done when: fresh install creates the DB; every feature behaves identically against SQLite; data persists across app kill/restart; schema conformance script passes; analyze clean.
 

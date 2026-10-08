@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../core/models/todo.dart';
 import '../../../core/utils/dates.dart';
+import '../../../core/widgets/padded_card.dart';
 import '../../todo/ui/todo_presentation.dart';
 
 /// One tappable todo row that opens the single-todo detail page.
@@ -33,10 +34,7 @@ class TodoRow extends StatelessWidget {
         style: const .delta(
           padding: .value(EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
         ),
-        // FCard does not apply [FCardStyle.padding] to its child on its own, so
-        // the content is padded explicitly with the card's style padding.
-        builder: (context, style, child) =>
-            Padding(padding: style.padding, child: child),
+        builder: paddedCardBuilder,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

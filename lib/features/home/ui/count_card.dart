@@ -1,6 +1,7 @@
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../core/widgets/padded_card.dart';
 import 'count_card_data.dart';
 
 /// One tappable count card.
@@ -15,8 +16,7 @@ class CountCard extends StatelessWidget {
     return FTappable(
       onPress: data.onPress,
       child: FCard(
-        builder: (context, style, child) =>
-            Padding(padding: style.padding, child: child),
+        builder: paddedCardBuilder,
         child: Row(
           // Top-align so the icon sits on the count's first line rather than
           // floating in the middle of the taller count + label column.

@@ -7,6 +7,8 @@ import 'package:material_ui/material_ui.dart';
 import '../../../core/data/repository_providers.dart';
 import '../../../core/models/todo.dart';
 import '../../../core/utils/dates.dart';
+import '../../../core/widgets/centered_message.dart';
+import '../../../core/widgets/padded_card.dart';
 import '../providers/todo_providers.dart';
 import 'todo_presentation.dart';
 
@@ -36,9 +38,9 @@ class TodoDetailPage extends ConsumerWidget {
       ),
       child: asyncTodo.when(
         data: (todo) => todo == null
-            ? const _CenteredMessage('This todo no longer exists.')
+            ? const CenteredMessage('This todo no longer exists.')
             : _TodoDetail(todo: todo),
-        error: (_, _) => const _CenteredMessage('Could not load this todo.'),
+        error: (_, _) => const CenteredMessage('Could not load this todo.'),
         loading: () => const Center(child: FCircularProgress()),
       ),
     );
@@ -91,8 +93,7 @@ class _TodoDetail extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         FCard(
-          builder: (context, style, child) =>
-              Padding(padding: style.padding, child: child),
+          builder: paddedCardBuilder,
           child: Column(
             spacing: 8,
             children: [
@@ -118,8 +119,7 @@ class _TodoDetail extends ConsumerWidget {
           _SectionTitle('Description'),
           const SizedBox(height: 8),
           FCard(
-            builder: (context, style, child) =>
-                Padding(padding: style.padding, child: child),
+            builder: paddedCardBuilder,
             child: Text(
               todo.description!,
               style: context.theme.typography.body.sm,
@@ -189,27 +189,6 @@ class _SectionTitle extends StatelessWidget {
     label,
     style: context.theme.typography.body.lg.copyWith(
       fontWeight: FontWeight.w600,
-    ),
-  );
-}
-
-/// A centered placeholder message.
-class _CenteredMessage extends StatelessWidget {
-  const _CenteredMessage(this.message);
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Text(
-        message,
-        textAlign: TextAlign.center,
-        style: context.theme.typography.body.sm.copyWith(
-          color: context.theme.colors.mutedForeground,
-        ),
-      ),
     ),
   );
 }

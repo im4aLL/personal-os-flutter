@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../features/links/ui/links_page.dart';
+import '../features/notes/ui/note_editor_page.dart';
 import '../features/projects/ui/projects_page.dart';
 import '../features/todo/ui/todo_detail_page.dart';
 import '../features/worklog/ui/work_log_page.dart';
@@ -25,6 +26,13 @@ abstract final class AppRoutes {
   /// [routes] because the id travels as a constructor argument.
   static Route<void> todoDetail(String id) =>
       MaterialPageRoute<void>(builder: (_) => TodoDetailPage(todoId: id));
+
+  /// Builds the route for the note editor of [id].
+  ///
+  /// Parameterized detail routes are built as [Route]s rather than entries in
+  /// [routes] because the id travels as a constructor argument.
+  static Route<void> noteEditor(String id) =>
+      MaterialPageRoute<void>(builder: (_) => NoteEditorPage(noteId: id));
 
   /// The route table registered on the [MaterialApp].
   static final Map<String, WidgetBuilder> routes = {

@@ -6,6 +6,8 @@ import '../../../app/router.dart';
 import '../../../core/data/repository_providers.dart';
 import '../../../core/models/todo.dart';
 import '../../../core/utils/dates.dart';
+import '../../../core/widgets/delete_confirm_dialog.dart';
+import '../../../core/widgets/padded_card.dart';
 import 'todo_actions_sheet.dart';
 import 'todo_edit_sheet.dart';
 import 'todo_presentation.dart';
@@ -129,7 +131,11 @@ class TodoCard extends ConsumerWidget {
           }
         }
       case TodoAction.delete:
-        final confirmed = await _confirmDelete(context, todo);
+        final confirmed = await showDeleteConfirmDialog(
+          context: context,
+          title: 'Delete todo?',
+          body: '"${todo.title}" will be permanently deleted.',
+        );
         if (!confirmed) return;
         try {
           await todoRepository.delete(todo.id);
@@ -173,10 +179,7 @@ class TodoCard extends ConsumerWidget {
         style: const .delta(
           padding: .value(EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
         ),
-        // FCard does not apply [FCardStyle.padding] to its child on its own,
-        // so the content is padded explicitly with the card's style padding.
-        builder: (context, style, child) =>
-            Padding(padding: style.padding, child: child),
+        builder: paddedCardBuilder,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -263,49 +266,4 @@ class TodoCard extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Confirms the permanent deletion of [todo].
-Future<bool> _confirmDelete(BuildContext context, Todo todo) async {
-  final result = await showFDialog<bool>(
-    context: context,
-    builder: (context, style, animation) => FDialog(
-      builder: (context, style) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Delete todo?', style: style.titleTextStyle),
-            const SizedBox(height: 8),
-            Text(
-              '"${todo.title}" will be permanently deleted.',
-              style: style.bodyTextStyle,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: FButton(
-                    variant: .outline,
-                    onPress: () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FButton(
-                    variant: .destructive,
-                    onPress: () => Navigator.of(context).pop(true),
-                    child: const Text('Delete'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-  return result ?? false;
 }

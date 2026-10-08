@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/models/todo.dart';
-import 'empty_state.dart';
+import '../../../core/widgets/empty_state.dart';
 import 'section_title.dart';
 import 'todo_row.dart';
 
@@ -30,7 +30,7 @@ class TodoSection extends StatelessWidget {
         SectionTitle(title),
         const SizedBox(height: 12),
         if (todos.isEmpty)
-          EmptyState(emptyLabel)
+          AppEmptyState(emptyLabel)
         else
           for (final todo in todos)
             Padding(

@@ -30,10 +30,7 @@ class TodoStatusTabs extends ConsumerWidget {
                   .value
                   ?.length,
             ),
-            child: const TodoStatusList(
-              status: TodoStatus.todo,
-              addLabel: 'New todo',
-            ),
+            child: const TodoStatusList(status: TodoStatus.todo),
           ),
           FTabEntry(
             label: _TabLabel(
@@ -43,10 +40,7 @@ class TodoStatusTabs extends ConsumerWidget {
                   .value
                   ?.length,
             ),
-            child: const TodoStatusList(
-              status: TodoStatus.inProgress,
-              addLabel: 'New in-progress todo',
-            ),
+            child: const TodoStatusList(status: TodoStatus.inProgress),
           ),
           FTabEntry(
             label: _TabLabel(
@@ -56,10 +50,7 @@ class TodoStatusTabs extends ConsumerWidget {
                   .value
                   ?.length,
             ),
-            child: const TodoStatusList(
-              status: TodoStatus.completed,
-              addLabel: 'New completed todo',
-            ),
+            child: const TodoStatusList(status: TodoStatus.completed),
           ),
         ],
       ),

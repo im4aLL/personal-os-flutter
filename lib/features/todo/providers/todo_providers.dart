@@ -21,14 +21,18 @@ final todoByIdProvider = StreamProvider.family<Todo?, String>((ref, id) {
 
 /// Filter state for the Todo tab.
 ///
-/// Held in a [Notifier] (rather than widget-local state) so the search query
-/// and archived visibility survive tab switches: the app shell keeps [TodoPage]
-/// alive in an [IndexedStack], and the filter outlives even that. List data
-/// itself stays stream-based ([todosByStatusProvider], [archivedTodosProvider])
-/// so repository mutations update every tab instantly.
+/// Held in a [Notifier] (rather than widget-local state) so the search query,
+/// its visibility, and the archived view survive tab switches: the app shell
+/// keeps [TodoPage] alive in an [IndexedStack], and the filter outlives even
+/// that. List data itself stays stream-based ([todosByStatusProvider],
+/// [archivedTodosProvider]) so repository mutations update every tab instantly.
 class TodoFilter {
   /// Creates a [TodoFilter].
-  const TodoFilter({this.query = '', this.showArchived = false});
+  const TodoFilter({
+    this.query = '',
+    this.showArchived = false,
+    this.showSearch = false,
+  });
 
   /// Text matched (case-insensitively) against title and description.
   final String query;
@@ -36,11 +40,16 @@ class TodoFilter {
   /// Whether the archived list replaces the status tabs.
   final bool showArchived;
 
+  /// Whether the search field is visible in the header.
+  final bool showSearch;
+
   /// Returns a copy with the given fields replaced.
-  TodoFilter copyWith({String? query, bool? showArchived}) => TodoFilter(
-    query: query ?? this.query,
-    showArchived: showArchived ?? this.showArchived,
-  );
+  TodoFilter copyWith({String? query, bool? showArchived, bool? showSearch}) =>
+      TodoFilter(
+        query: query ?? this.query,
+        showArchived: showArchived ?? this.showArchived,
+        showSearch: showSearch ?? this.showSearch,
+      );
 }
 
 /// Owns the [TodoFilter] for the Todo tab.
@@ -58,6 +67,15 @@ class TodoNotifier extends Notifier<TodoFilter> {
     if (value != state.showArchived) {
       state = state.copyWith(showArchived: value);
     }
+  }
+
+  /// Shows (`true`) or hides (`false`) the search field.
+  ///
+  /// Hiding the field also clears [TodoFilter.query]; otherwise the list would
+  /// stay filtered with no visible control explaining why.
+  void setShowSearch(bool value) {
+    if (value == state.showSearch) return;
+    state = state.copyWith(showSearch: value, query: value ? state.query : '');
   }
 }
 
