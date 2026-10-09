@@ -89,7 +89,7 @@ class _WorkLogEditSheetState extends ConsumerState<_WorkLogEditSheet> {
     if (startDay.isAfter(endDay)) {
       showFToast(
         context: context,
-        title: const Text('Start date must be before end date'),
+        title: const Text('Start date must be on or before end date'),
       );
       return;
     }
