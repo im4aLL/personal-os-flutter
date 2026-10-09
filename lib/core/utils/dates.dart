@@ -74,3 +74,16 @@ String formatDateTimeShort(String iso) =>
 String formatDateShort(String dateStr) =>
     DateFormat('MMM d').format(parseDate(dateStr));
 
+/// Formats a `YYYY-MM-DD` date range for display: a single day renders as
+/// `MMM d`, a same-year range as `MMM d - MMM d`, and a range crossing a
+/// year boundary as `MMM d, y - MMM d, y`.
+String formatDateRange(String start, String end) {
+  if (start == end) return formatDateShort(start);
+  if (parseDate(start).year != parseDate(end).year) {
+    final format = DateFormat('MMM d, y');
+    return '${format.format(parseDate(start))} - '
+        '${format.format(parseDate(end))}';
+  }
+  return '${formatDateShort(start)} - ${formatDateShort(end)}';
+}
+
