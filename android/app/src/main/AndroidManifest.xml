@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for the link page-title fetch and (Phase 10) Turso sync. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="personal_os_flutter"
         android:name="${applicationName}"

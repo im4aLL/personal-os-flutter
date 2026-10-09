@@ -9,13 +9,25 @@ import 'package:material_ui/material_ui.dart';
 /// are ignored.
 class TagEditor extends StatefulWidget {
   /// Creates a [TagEditor].
-  const TagEditor({super.key, required this.tags, required this.onChanged});
+  const TagEditor({
+    super.key,
+    required this.tags,
+    required this.onChanged,
+    this.enabled = true,
+  });
 
   /// The current tag names, in display order.
   final List<String> tags;
 
   /// Called with the full replacement list after an add or remove.
   final ValueChanged<List<String>> onChanged;
+
+  /// Whether tags can be added or removed.
+  ///
+  /// When `false` the field and the add button are disabled and chip removal is
+  /// disabled, so a caller can freeze the editor (for example during a save)
+  /// without losing the rendered tags.
+  final bool enabled;
 
   @override
   State<TagEditor> createState() => _TagEditorState();
@@ -32,6 +44,7 @@ class _TagEditorState extends State<TagEditor> {
 
   /// Adds the trimmed field value when it is non-empty and not already present.
   void _add() {
+    if (!widget.enabled) return;
     final name = _controller.text.trim();
     if (name.isEmpty) return;
 
@@ -66,7 +79,10 @@ class _TagEditorState extends State<TagEditor> {
             runSpacing: 8,
             children: [
               for (final tag in widget.tags)
-                _TagChip(tag: tag, onRemove: () => _remove(tag)),
+                _TagChip(
+                  tag: tag,
+                  onRemove: widget.enabled ? () => _remove(tag) : null,
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -80,6 +96,7 @@ class _TagEditorState extends State<TagEditor> {
                   onChange: (_) => setState(() {}),
                 ),
                 hint: 'Add tag',
+                enabled: widget.enabled,
                 textInputAction: .done,
                 onSubmit: (_) => _add(),
               ),
@@ -87,7 +104,7 @@ class _TagEditorState extends State<TagEditor> {
             const SizedBox(width: 8),
             FButton.icon(
               variant: .outline,
-              onPress: canAdd ? _add : null,
+              onPress: canAdd && widget.enabled ? _add : null,
               semanticsLabel: 'Add tag',
               child: const Icon(Icons.add),
             ),
@@ -103,13 +120,16 @@ class _TagChip extends StatelessWidget {
   const _TagChip({required this.tag, required this.onRemove});
 
   final String tag;
-  final VoidCallback onRemove;
+
+  /// Removes this tag, or null when removal is disabled.
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
     return FTappable(
       onPress: onRemove,
-      semanticsLabel: 'Remove tag $tag',
+      // Only announce a remove action while one is actually available.
+      semanticsLabel: onRemove == null ? null : 'Remove tag $tag',
       child: FBadge(
         variant: .secondary,
         child: Row(

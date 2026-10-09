@@ -12,7 +12,7 @@ Mobile port of the Personal OS desktop app (Tauri/React, reference at ../persona
 | Persistence (Phase 9) | drift, schema mirrors ../personal-os/src/lib/schema.ts (the remote Turso schema) column-for-column |
 | Sync (Phase 10) | Turso via libSQL HTTP API; bidirectional last-write-wins on updated_at; local DB is source of truth |
 | Tests | No broad suite. Targeted high-value tests only: clock/timestamp format, schema conformance vs schema.ts (node script), sync merge (LWW + pending_deletes), plus the Phase 2 Home stream-wiring widget test and the stream-combination test. Otherwise verification = flutter run / release APK + manual inspection; flutter analyze must stay clean |
-| Theme | Follow system by default; manual System/Light/Dark toggle in Settings (in-memory until Phase 8) |
+| Theme | Follow system by default; manual System/Light/Dark toggle in Settings (persisted device-locally via shared_preferences, not synced) |
 
 ## Architecture
 
@@ -139,7 +139,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 - [x] Phase 5 - Links (core)
 - [x] Phase 6 - Work Log
 - [x] Phase 7 - Projects (week Gantt)
-- [ ] Phase 8 - Enrichment: link metadata + persisted settings + empty states
+- [x] Phase 8 - Enrichment: link metadata + persisted settings + empty states
 - [ ] Phase 9 - Drift persistence
 - [ ] Phase 10 - Turso sync
 - [ ] Phase 11 - Polish + APK
@@ -151,7 +151,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 Goal: clean slate, ForUI app skeleton runs.
 
 Scope:
-- Verify `flutter --version` is 3.44+ (ForUI 0.22+ requirement); upgrade Flutter first if not.
+- Verify `flutter --version` is 3.47+ (ForUI 0.27+ and the shared_preferences stack requirements); upgrade Flutter first if not.
 - Delete lib/theme/ and lib/pages/; rewrite lib/main.dart.
 - `flutter pub add forui flutter_riverpod material_ui`.
 - main.dart: ProviderScope -> MaterialApp (supportedLocales + localizationsDelegates per ForUI docs) -> builder wrapping FTheme (FTheme.neutral.light.touch / dark.touch) -> FToaster -> FTooltipGroup; Material theme via toApproximateMaterialTheme(); home is a placeholder FScaffold with one FButton.
@@ -335,7 +335,7 @@ Done when: release APK installs on the phone and all features work offline; sync
 
 ## Risks and notes
 
-- ForUI 0.22+ requires Flutter 3.44+; check `flutter --version` before Phase 0. ForUI is pre-1.0: minors can break; pin the version, upgrade with `flutter pub upgrade forui --major-versions` and apply `dart fix --apply`.
+- Flutter 3.47+ is required (ForUI 0.27+ needs 3.47+, and the shared_preferences stack needs 3.44+); check `flutter --version` before Phase 0. ForUI is pre-1.0: minors can break; pin the version, upgrade with `flutter pub upgrade forui --major-versions` and apply `dart fix --apply`.
 - flutter_markdown is the pragmatic preview choice but low-activity; isolate it behind the MarkdownPreview wrapper so swapping packages later is a one-file change.
 - Gantt on phones: horizontal scroll + dialog editing only; if week_count grows large, build columns lazily (fixed-extent list) to avoid jank.
 - LWW sync limitation: deletes made on another device while this device is offline can resurrect rows; pending_deletes covers this device going offline, not the reverse direction. An improvement over the desktop (which loses offline deletes entirely), but not full two-device offline convergence.

@@ -1,13 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/app_shell.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
+import 'core/prefs/shared_preferences_provider.dart';
 
-void main() {
-  runApp(const ProviderScope(child: PersonalOsApp()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Load preferences before the first frame so hydration is synchronous and a
+  // persisted theme is applied without a light/dark flash.
+  final preferences = await SharedPreferences.getInstance();
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+      child: const PersonalOsApp(),
+    ),
+  );
 }
 
 /// Root of the Personal OS app.

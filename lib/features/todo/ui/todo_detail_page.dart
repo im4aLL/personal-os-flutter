@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
@@ -54,6 +52,28 @@ class _TodoDetail extends ConsumerWidget {
 
   final Todo todo;
 
+  /// Persists a status change, reporting a failure without leaving the page.
+  ///
+  /// Unlike the dashboard (which only navigates), the detail page's
+  /// complete/reopen action is a real mutation, so a repository failure must be
+  /// surfaced instead of being swallowed.
+  Future<void> _setStatus(
+    BuildContext context,
+    WidgetRef ref,
+    TodoStatus status,
+  ) async {
+    try {
+      await ref.read(todoRepositoryProvider).setStatus(todo.id, status);
+    } catch (_) {
+      if (context.mounted) {
+        showFToast(
+          context: context,
+          title: const Text('Could not update todo'),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.theme.colors;
@@ -61,9 +81,6 @@ class _TodoDetail extends ConsumerWidget {
     final dueDate = todo.dueDate;
     final overdue =
         !completed && dueDate != null && dueDate.compareTo(todayDate()) < 0;
-
-    void setStatus(TodoStatus status) =>
-        unawaited(ref.read(todoRepositoryProvider).setStatus(todo.id, status));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
@@ -130,12 +147,12 @@ class _TodoDetail extends ConsumerWidget {
         if (completed)
           FButton(
             variant: .outline,
-            onPress: () => setStatus(TodoStatus.todo),
+            onPress: () => _setStatus(context, ref, TodoStatus.todo),
             child: const Text('Reopen'),
           )
         else
           FButton(
-            onPress: () => setStatus(TodoStatus.completed),
+            onPress: () => _setStatus(context, ref, TodoStatus.completed),
             child: const Text('Mark as done'),
           ),
       ],
