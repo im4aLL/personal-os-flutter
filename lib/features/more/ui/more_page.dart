@@ -11,8 +11,18 @@ class MorePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FScaffold(
-      header: const FHeader(title: Text('More')),
-      child: Column(
+      // The list owns the content padding, so the scaffold must not add its
+      // own page padding on top (which would use a smaller 12 inset than the
+      // other tab pages' 16).
+      childPad: false,
+      // Nested (not root) so the title font matches the other tab pages;
+      // `centerStart` keeps the title left-aligned.
+      header: const FHeader.nested(
+        titleAlignment: AlignmentDirectional.centerStart,
+        title: Text('More'),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
           _MoreCard(
             icon: Icons.link,

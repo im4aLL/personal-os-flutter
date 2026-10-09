@@ -11,18 +11,37 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return FScaffold(
-      header: const FHeader(title: Text('Settings')),
-      child: FTileGroup(
-        label: const Text('Appearance'),
+      // The list owns the content padding, so the scaffold must not add its
+      // own page padding on top (which would use a smaller 12 inset than the
+      // other tab pages' 16).
+      childPad: false,
+      // Nested (not root) so the title font matches the other tab pages;
+      // `centerStart` keeps the title left-aligned.
+      header: const FHeader.nested(
+        titleAlignment: AlignmentDirectional.centerStart,
+        title: Text('Settings'),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
-          _themeTile(
-            ref,
-            ThemeMode.system,
-            Icons.brightness_auto_outlined,
-            'System',
+          FTileGroup(
+            label: const Text('Appearance'),
+            children: [
+              _themeTile(
+                ref,
+                ThemeMode.system,
+                Icons.brightness_auto_outlined,
+                'System',
+              ),
+              _themeTile(
+                ref,
+                ThemeMode.light,
+                Icons.light_mode_outlined,
+                'Light',
+              ),
+              _themeTile(ref, ThemeMode.dark, Icons.dark_mode_outlined, 'Dark'),
+            ],
           ),
-          _themeTile(ref, ThemeMode.light, Icons.light_mode_outlined, 'Light'),
-          _themeTile(ref, ThemeMode.dark, Icons.dark_mode_outlined, 'Dark'),
         ],
       ),
     );
