@@ -67,6 +67,18 @@ abstract interface class NoteRepository {
   /// Replaces [note] by id and stamps `updated_at`.
   Future<void> update(Note note);
 
+  /// Updates only [title]/[content] of the note with [id] and stamps
+  /// `updated_at`.
+  ///
+  /// Never touches `pinned` or the note's tags: the pin flag is owned solely by
+  /// [setPinned], so a queued content autosave cannot re-assert a pin that a
+  /// failed [setPinned] rolled back.
+  Future<void> updateContent(
+    String id, {
+    String? title,
+    required String content,
+  });
+
   /// Sets the pinned flag of the note with [id].
   Future<void> setPinned(String id, bool pinned);
 

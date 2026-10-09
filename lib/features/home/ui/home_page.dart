@@ -86,21 +86,23 @@ class HomePage extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
         children: [
           SummaryLine(overdue: overdue.length, dueToday: dueToday.length),
-          const SizedBox(height: 20),
-          TodoSection(
-            title: 'Due today',
-            emptyLabel: 'Nothing due today.',
-            todos: dueToday,
-            onOpen: open,
-          ),
-          const SizedBox(height: 20),
-          TodoSection(
-            title: 'Overdue',
-            emptyLabel: 'Nothing overdue.',
-            todos: overdue,
-            overdue: true,
-            onOpen: open,
-          ),
+          if (dueToday.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            TodoSection(
+              title: 'Due today',
+              todos: dueToday,
+              onOpen: open,
+            ),
+          ],
+          if (overdue.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            TodoSection(
+              title: 'Overdue',
+              todos: overdue,
+              overdue: true,
+              onOpen: open,
+            ),
+          ],
           const SizedBox(height: 24),
           SectionTitle('Overview'),
           const SizedBox(height: 12),

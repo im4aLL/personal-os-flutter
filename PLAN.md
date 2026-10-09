@@ -73,7 +73,7 @@ lib/
     more/       ui/more_page.dart
     settings/   ui/settings_page.dart    providers/
 test/                             # targeted tests: clock/timestamp, Home stream wiring, stream combination, project repository, tag-timestamp semantics (sync merge in Phase 10)
-tool/                             # schema_conformance.js (diffs schema.ts vs drift schema + remote-DDL port)
+tool/                             # schema_conformance.js (diffs schema.ts vs tables.dart + the committed database.g.dart; the Phase 10 remote-DDL port diff activates once that port lands)
 ```
 
 Feature-first: each feature owns ui/ + providers/; shared code lives in core/. test/ holds only the targeted high-value tests (clock/timestamp, the Phase 2 Home stream-wiring and stream-combination tests, and the Phase 10 sync merge tests); tool/schema_conformance.js is the automated schema-drift guard.
@@ -126,7 +126,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 | 4 | flutter_markdown |
 | 5 | url_launcher |
 | 8 | http, shared_preferences |
-| 9 | drift, sqlite3_flutter_libs, path_provider, path; dev: drift_dev, build_runner |
+| 9 | drift, path_provider, path; dev: drift_dev, build_runner (native SQLite comes from drift's sqlite3 3.x dependency, bundled via Dart build hooks) |
 | 10 | (reuses http) |
 
 ## Status
@@ -140,7 +140,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 - [x] Phase 6 - Work Log
 - [x] Phase 7 - Projects (week Gantt)
 - [x] Phase 8 - Enrichment: link metadata + persisted settings + empty states
-- [ ] Phase 9 - Drift persistence
+- [x] Phase 9 - Drift persistence
 - [ ] Phase 10 - Turso sync
 - [ ] Phase 11 - Polish + APK
 
@@ -284,7 +284,7 @@ Goal: mock data replaced by real local SQLite; UI untouched.
 
 Scope:
 - Add drift stack; core/data/drift/tables.dart mirrors ../personal-os/src/lib/schema.ts column-for-column (names, types, nullability, CHECK and UNIQUE constraints, foreign keys with ON DELETE CASCADE, defaults, indexes - see Turso compatibility contract: schema freeze). Diff tables.dart against schema.ts as a review step before proceeding (including FKs, cascade, indexes, and constraints, not just columns).
-- Schema conformance guard: a node script (tool/schema_conformance.js) parses REMOTE_SCHEMAS from ../personal-os/src/lib/schema.ts and diffs it against tables.dart and the remote-DDL Dart port (columns, types, nullability, defaults, CHECK/UNIQUE constraints, FKs/cascade, indexes). Run before every commit/merge; any drift fails the build.
+- Schema conformance guard: a node script (tool/schema_conformance.js) parses REMOTE_SCHEMAS from ../personal-os/src/lib/schema.ts and diffs it against tables.dart and the committed database.g.dart (columns in order, types, nullability, defaults, CHECK/UNIQUE constraints, FKs/cascade, indexes with uniqueness). The Phase 10 remote-DDL Dart port is diffed too once that port lands; in Phase 9 the script logs and skips its absence. Run before every commit/merge; any drift fails the build.
 - database.dart (AppDatabase, schema version 1 - fresh app, no legacy migrations).
 - DriftTodoRepository etc. implementing the same interfaces with drift queries and .watch() streams.
 - Swap provider bodies to drift impls (single localized diff); keep mock impls available for ProviderScope overrides (demos, widget previews).
@@ -341,7 +341,7 @@ Done when: release APK installs on the phone and all features work offline; sync
 - LWW sync limitation: deletes made on another device while this device is offline can resurrect rows; pending_deletes covers this device going offline, not the reverse direction. An improvement over the desktop (which loses offline deletes entirely), but not full two-device offline convergence.
 - Multi-client clock skew: LWW on updated_at means a device with a wrong clock can win or lose edits incorrectly. Keep client-stamped timestamps (port fidelity) but on sync compare against Turso server time and warn the user on gross skew; also keep the phone on automatic date/time.
 - app_settings key collisions across clients are silent: a mobile key that accidentally matches a desktop key will overwrite it via LWW. Follow the namespacing rule in the compatibility contract.
-- Schema drift is the highest-severity risk in this project: one wrong column or value format from Flutter breaks the desktop and TUI clients. Mitigations: binding compatibility contract, the automated schema conformance script (Phase 9) that diffs schema.ts against the drift schema and remote-DDL port on every commit, Dart enums enforcing CHECK value domains, and the cross-client verification pass in Phase 10 before sync is considered done.
+- Schema drift is the highest-severity risk in this project: one wrong column or value format from Flutter breaks the desktop and TUI clients. Mitigations: binding compatibility contract, the automated schema conformance script (Phase 9) that diffs schema.ts against tables.dart and the committed database.g.dart on every commit (the remote-DDL port is added to that diff in Phase 10), Dart enums enforcing CHECK value domains, and the cross-client verification pass in Phase 10 before sync is considered done.
 - InMemoryStore must use a broadcast StreamController; a single-subscription stream breaks the second listener (dashboard + feature page).
 - Tag edits are insert-only (delete all + re-insert on save) to match the reference schema and keep sync simple.
 - Offline tag and phase edits do not fully converge: tags are insert-only with no tombstones, so an offline tag edit (delete-all + re-insert) leaves stale tags that resurrect on pull; project_phases has no updated_at and no tombstone, and phase edits/deletes rely on immediate remote mirroring that is silently dropped offline. Matches the desktop app; treat tag and phase edits as best-effort when offline. Accepted decision: the schema freeze rules out adding tombstones/updated_at, so this parity is intended, not a gap.

@@ -1,49 +1,46 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'mock/mock_link_repository.dart';
-import 'mock/mock_note_repository.dart';
-import 'mock/mock_project_repository.dart';
-import 'mock/mock_settings_repository.dart';
-import 'mock/mock_todo_repository.dart';
-import 'mock/mock_work_log_repository.dart';
+import 'drift/database.dart';
+import 'drift/drift_link_repository.dart';
+import 'drift/drift_note_repository.dart';
+import 'drift/drift_project_repository.dart';
+import 'drift/drift_settings_repository.dart';
+import 'drift/drift_todo_repository.dart';
+import 'drift/drift_work_log_repository.dart';
 import 'repositories.dart';
 
 /// Repository providers.
 ///
-/// Phase 9 swaps each mock body for a drift implementation in exactly this
-/// file; UI and state code never change. The plan shows this swap as:
-///
-/// ```dart
-/// final todoRepositoryProvider = Provider<TodoRepository>(
-///   // Phase 9: replace with DriftTodoRepository(ref.watch(appDatabaseProvider))
-///   (ref) => MockTodoRepository.seeded(),
-/// );
-/// ```
+/// Phase 9 replaced the in-memory mocks with the drift implementations here;
+/// this is the only place the swap happens, so UI and state code keep reading
+/// the interfaces unchanged. The mock implementations remain in
+/// `lib/core/data/mock/` for `ProviderScope` overrides (demos, widget previews,
+/// and manual verification).
 final todoRepositoryProvider = Provider<TodoRepository>(
-  (ref) => MockTodoRepository.seeded(),
+  (ref) => DriftTodoRepository(ref.watch(appDatabaseProvider)),
 );
 
 /// Notes repository.
 final noteRepositoryProvider = Provider<NoteRepository>(
-  (ref) => MockNoteRepository.seeded(),
+  (ref) => DriftNoteRepository(ref.watch(appDatabaseProvider)),
 );
 
 /// Links repository.
 final linkRepositoryProvider = Provider<LinkRepository>(
-  (ref) => MockLinkRepository.seeded(),
+  (ref) => DriftLinkRepository(ref.watch(appDatabaseProvider)),
 );
 
 /// Work log repository.
 final workLogRepositoryProvider = Provider<WorkLogRepository>(
-  (ref) => MockWorkLogRepository.seeded(),
+  (ref) => DriftWorkLogRepository(ref.watch(appDatabaseProvider)),
 );
 
 /// Projects repository.
 final projectRepositoryProvider = Provider<ProjectRepository>(
-  (ref) => MockProjectRepository.seeded(),
+  (ref) => DriftProjectRepository(ref.watch(appDatabaseProvider)),
 );
 
 /// Shared `app_settings` repository.
 final settingsRepositoryProvider = Provider<SettingsRepository>(
-  (ref) => MockSettingsRepository.seeded(),
+  (ref) => DriftSettingsRepository(ref.watch(appDatabaseProvider)),
 );

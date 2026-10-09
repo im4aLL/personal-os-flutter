@@ -54,6 +54,27 @@ class MockNoteRepository implements NoteRepository {
   }
 
   @override
+  Future<void> updateContent(
+    String id, {
+    String? title,
+    required String content,
+  }) async {
+    // Writes only title/content and updated_at; `pinned` and tags are owned
+    // elsewhere, so a queued autosave can never carry a stale pin.
+    _store.mutate((items) {
+      final index = items.indexWhere((n) => n.id == id);
+      if (index == -1) return;
+      items[index] = items[index].copyWith(
+        note: items[index].note.copyWith(
+          title: title,
+          content: content,
+          updatedAt: nowIso(),
+        ),
+      );
+    });
+  }
+
+  @override
   Future<void> setPinned(String id, bool pinned) async {
     _mutate(id, (note) => note.copyWith(note: note.note.copyWith(pinned: pinned)));
   }

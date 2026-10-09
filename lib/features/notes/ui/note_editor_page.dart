@@ -77,6 +77,16 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
   /// once the repository is genuinely asynchronous (the Phase 9 drift swap).
   Future<void> _writeChain = Future<void>.value();
 
+  /// Monotonic id of the newest optimistic pin write. A failed write only
+  /// resyncs when it is still the newest, so an older failure cannot roll back
+  /// a newer pin toggle.
+  int _pinGeneration = 0;
+
+  /// Monotonic id of the newest optimistic tag write. A failed write only
+  /// resyncs when it is still the newest, so an older failure cannot clobber a
+  /// newer tag edit.
+  int _tagGeneration = 0;
+
   /// Set in [dispose] so the teardown flush never touches widget state.
   bool _disposed = false;
 
@@ -144,44 +154,51 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
     if (_dirty) await _persist();
   }
 
-  /// Queues a write of title/content/pin, serialized behind any in-flight write.
+  /// Queues a write of title/content, serialized behind any in-flight write.
+  ///
+  /// The pin flag is deliberately absent: it is owned solely by [setPinned], so
+  /// a queued autosave can never re-assert a pin that a failed [setPinned] has
+  /// already rolled back.
   Future<void> _persist() {
-    final base = _baseNote;
-    if (base == null) return Future<void>.value();
+    if (_baseNote == null) return Future<void>.value();
 
     // Cleared before queueing so a second flush (e.g. dispose right after a
     // PopScope flush) cannot write the same edit twice.
     _dirty = false;
     final generation = ++_writeGeneration;
     final title = _titleController.text.trim();
-    final note = base.copyWith(
-      title: title.isEmpty ? null : title,
-      content: _contentController.text,
-      pinned: _pinned,
-    );
+    final content = _contentController.text;
 
     if (mounted && !_disposed) setState(() => _status = _SaveStatus.saving);
 
-    return _enqueue(() => _write(note, generation));
+    return _enqueue(
+      () => _write(title.isEmpty ? null : title, content, generation),
+    );
   }
 
   /// Runs [action] as the next step of the single-flight write queue and returns
   /// its result to the caller.
   ///
-  /// Title/content, pin, and tag writes all go through here, so they land in
-  /// submission order once the repository is genuinely asynchronous. The queue
-  /// tail is advanced on a future that swallows [action]'s error, so one failed
-  /// write never poisons later writers; callers still see the original error.
+  /// Title/content, pin, and tag writes, plus the failure resync reads, all go
+  /// through here, so they land in submission order once the repository is
+  /// genuinely asynchronous. The queue tail is advanced on a future that
+  /// swallows [action]'s error, so one failed write never poisons later writers;
+  /// callers still see the original error.
   Future<T> _enqueue<T>(Future<T> Function() action) {
     final result = _writeChain.then((_) => action());
     _writeChain = result.then<void>((_) {}, onError: (_) {});
     return result;
   }
 
-  /// Performs one queued write; [generation] identifies it against newer writes.
-  Future<void> _write(Note note, int generation) async {
+  /// Performs one queued content write; [generation] identifies it against
+  /// newer writes.
+  Future<void> _write(String? title, String content, int generation) async {
     try {
-      await _repository.update(note);
+      await _repository.updateContent(
+        widget.noteId,
+        title: title,
+        content: content,
+      );
       // A successful write proves the repository is healthy again.
       _saveFailures = 0;
       // Only the newest write may claim durability, and never while newer input
@@ -217,12 +234,16 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
 
   Future<void> _togglePin() async {
     final next = !_pinned;
+    final generation = ++_pinGeneration;
     setState(() => _pinned = next);
     try {
       await _enqueue(() => _repository.setPinned(widget.noteId, next));
     } catch (_) {
-      if (mounted) {
-        setState(() => _pinned = !next);
+      // Only the newest pin write may converge the UI; a stale failure must not
+      // overwrite a newer optimistic toggle.
+      if (!mounted || generation != _pinGeneration) return;
+      await _resyncPin(generation, fallback: !next);
+      if (mounted && generation == _pinGeneration) {
         showFToast(
           context: context,
           title: const Text('Could not update note'),
@@ -233,19 +254,62 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
 
   Future<void> _setTags(List<String> tags) async {
     final previous = _tags;
+    final generation = ++_tagGeneration;
     setState(() => _tags = tags);
     try {
       // Tag-only edits must not advance updated_at; the repository enforces it.
       await _enqueue(() => _repository.setTags(widget.noteId, tags));
     } catch (_) {
-      if (mounted) {
-        setState(() => _tags = previous);
+      // Only the newest tag write may converge the UI; an older failure must
+      // not clobber a newer tag edit that is already queued.
+      if (!mounted || generation != _tagGeneration) return;
+      await _resyncTags(generation, fallback: previous);
+      if (mounted && generation == _tagGeneration) {
         showFToast(
           context: context,
           title: const Text('Could not update tags'),
         );
       }
     }
+  }
+
+  /// Re-reads the note after a failed pin write and applies the stored pin,
+  /// so a failed optimistic toggle converges on the store.
+  ///
+  /// The re-read is queued behind any in-flight write, so it observes the store
+  /// after earlier writes have settled. Falls back to [fallback] when the
+  /// re-read itself fails, and is a no-op once a newer pin write has started.
+  Future<void> _resyncPin(int generation, {required bool fallback}) async {
+    bool value = fallback;
+    try {
+      final loaded = await _enqueue(() => _repository.getById(widget.noteId));
+      if (loaded != null) value = loaded.pinned;
+    } catch (_) {
+      // Keep the fallback when the re-read also fails.
+    }
+    if (!mounted || generation != _pinGeneration) return;
+    setState(() => _pinned = value);
+  }
+
+  /// Re-reads the note after a failed tag write and applies the stored tags,
+  /// so a failed optimistic edit converges on the store.
+  ///
+  /// The re-read is queued behind any in-flight write, so it observes the store
+  /// after earlier writes have settled. Falls back to [fallback] when the
+  /// re-read itself fails, and is a no-op once a newer tag write has started.
+  Future<void> _resyncTags(
+    int generation, {
+    required List<String> fallback,
+  }) async {
+    var value = fallback;
+    try {
+      final loaded = await _enqueue(() => _repository.getById(widget.noteId));
+      if (loaded != null) value = List<String>.of(loaded.tags);
+    } catch (_) {
+      // Keep the fallback when the re-read also fails.
+    }
+    if (!mounted || generation != _tagGeneration) return;
+    setState(() => _tags = value);
   }
 
   Future<void> _delete() async {
