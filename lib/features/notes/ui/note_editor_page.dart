@@ -9,8 +9,8 @@ import '../../../core/data/repository_providers.dart';
 import '../../../core/models/note.dart';
 import '../../../core/widgets/centered_message.dart';
 import '../../../core/widgets/delete_confirm_dialog.dart';
+import '../../../core/widgets/tag_editor.dart';
 import 'markdown_preview.dart';
-import 'note_tag_editor.dart';
 
 /// Full-screen editor for the note with id [noteId].
 ///
@@ -327,9 +327,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
               },
             ),
             FItem(
-              prefix: Icon(
-                _pinned ? Icons.push_pin : Icons.push_pin_outlined,
-              ),
+              prefix: Icon(_pinned ? Icons.push_pin : Icons.push_pin_outlined),
               title: Text(_pinned ? 'Unpin' : 'Pin'),
               onPress: () {
                 controller.hide();
@@ -381,7 +379,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
                 child: _SaveIndicator(status: _status),
               ),
               const SizedBox(height: 8),
-              NoteTagEditor(tags: _tags, onChanged: _setTags),
+              TagEditor(tags: _tags, onChanged: _setTags),
               const SizedBox(height: 12),
             ],
           ),

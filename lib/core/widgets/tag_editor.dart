@@ -1,19 +1,15 @@
 import 'package:forui/forui.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// Editable tag chips for a note.
+/// Editable tag chips for an entity with tags.
 ///
 /// Existing [tags] render as removable badges; the trailing field adds a tag on
 /// submit. The whole list is emitted through [onChanged] so the parent owns the
 /// state and the repository write. Empty and duplicate (case-insensitive) names
 /// are ignored.
-class NoteTagEditor extends StatefulWidget {
-  /// Creates a [NoteTagEditor].
-  const NoteTagEditor({
-    super.key,
-    required this.tags,
-    required this.onChanged,
-  });
+class TagEditor extends StatefulWidget {
+  /// Creates a [TagEditor].
+  const TagEditor({super.key, required this.tags, required this.onChanged});
 
   /// The current tag names, in display order.
   final List<String> tags;
@@ -22,10 +18,10 @@ class NoteTagEditor extends StatefulWidget {
   final ValueChanged<List<String>> onChanged;
 
   @override
-  State<NoteTagEditor> createState() => _NoteTagEditorState();
+  State<TagEditor> createState() => _TagEditorState();
 }
 
-class _NoteTagEditorState extends State<NoteTagEditor> {
+class _TagEditorState extends State<TagEditor> {
   final TextEditingController _controller = TextEditingController();
 
   @override

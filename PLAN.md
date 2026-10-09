@@ -136,7 +136,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 - [x] Phase 2 - Core models, mock repositories, Home dashboard
 - [x] Phase 3 - Todo
 - [x] Phase 4 - Notes
-- [ ] Phase 5 - Links (core)
+- [x] Phase 5 - Links (core)
 - [ ] Phase 6 - Work Log
 - [ ] Phase 7 - Projects (week Gantt)
 - [ ] Phase 8 - Enrichment: link metadata + persisted settings + empty states

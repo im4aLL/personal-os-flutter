@@ -1,5 +1,17 @@
 import 'sentinel.dart';
 
+/// Returns the host of [url] for display and favicon lookup, or '' when [url]
+/// cannot be parsed into a host.
+String linkDomain(String url) => Uri.tryParse(url)?.host ?? '';
+
+/// Whether [url] parses to an http(s) URL with a non-empty host.
+bool isHttpUrl(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.host.isEmpty) return false;
+  final scheme = uri.scheme.toLowerCase();
+  return scheme == 'http' || scheme == 'https';
+}
+
 /// A saved link, mirroring the remote `links` table column-for-column.
 class Link {
   /// Creates a [Link].

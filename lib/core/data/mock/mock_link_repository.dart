@@ -124,7 +124,7 @@ List<LinkWithTags> _seedLinks() {
       title: 'Flutter documentation',
       createdHoursAgo: 48,
       updatedHoursAgo: 2,
-      tags: const ['dev', 'flutter'],
+      tags: const ['dev', 'flutter', 'docs'],
     ),
     link(
       id: 'c0000000-0000-4000-8000-000000000002',
@@ -132,7 +132,7 @@ List<LinkWithTags> _seedLinks() {
       title: 'ForUI',
       createdHoursAgo: 72,
       updatedHoursAgo: 24,
-      tags: const ['dev', 'ui'],
+      tags: const ['dev', 'ui', 'design'],
     ),
     link(
       id: 'c0000000-0000-4000-8000-000000000003',
@@ -140,7 +140,7 @@ List<LinkWithTags> _seedLinks() {
       title: 'Riverpod',
       createdHoursAgo: 96,
       updatedHoursAgo: 48,
-      tags: const ['dev'],
+      tags: const ['dev', 'flutter', 'state'],
     ),
     link(
       id: 'c0000000-0000-4000-8000-000000000004',
@@ -148,7 +148,7 @@ List<LinkWithTags> _seedLinks() {
       title: 'Turso',
       createdHoursAgo: 120,
       updatedHoursAgo: 96,
-      tags: const ['infra', 'db'],
+      tags: const ['infra', 'db', 'backend'],
     ),
     link(
       id: 'c0000000-0000-4000-8000-000000000005',
@@ -156,6 +156,7 @@ List<LinkWithTags> _seedLinks() {
       title: 'Hacker News',
       createdHoursAgo: 144,
       updatedHoursAgo: 144,
+      tags: const ['reading', 'news'],
     ),
   ];
 }
