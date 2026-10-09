@@ -139,6 +139,18 @@ class MockProjectRepository implements ProjectRepository {
   @override
   Future<void> deletePhase(String id) async {
     _phases.mutate((items) => items.removeWhere((p) => p.id == id));
+    // The frozen schema declares `work_items.phase_id REFERENCES
+    // project_phases(id)` with no `ON DELETE CASCADE`, so referencing rows
+    // are unphased in the same operation (matching the documented repository
+    // contract): items survive with a null phase instead of a dangling id.
+    final now = nowIso();
+    _workItems.mutate((items) {
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].phaseId == id) {
+          items[i] = items[i].copyWith(phaseId: null, updatedAt: now);
+        }
+      }
+    });
   }
 
   // -- Work items -------------------------------------------------------------
