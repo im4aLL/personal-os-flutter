@@ -65,6 +65,13 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
   }
 }
 
+/// The human-readable label for a [ThemeMode], used by the appearance settings.
+String themeModeLabel(ThemeMode mode) => switch (mode) {
+  ThemeMode.system => 'System',
+  ThemeMode.light => 'Light',
+  ThemeMode.dark => 'Dark',
+};
+
 /// Parses a stored [ThemeMode] name, defaulting to [ThemeMode.system] when the
 /// value is absent or unrecognized.
 ThemeMode _parseThemeMode(String? value) {

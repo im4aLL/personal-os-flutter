@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
 import '../data/drift/database.dart';
 import '../data/remote_write_sink.dart';
@@ -14,15 +15,44 @@ final syncControllerProvider = NotifierProvider<SyncController, SyncState>(
   SyncController.new,
 );
 
+/// The single HTTP client through which every Turso request flows.
+///
+/// Kept for the app's lifetime (closed on app dispose) so its connection pool
+/// and TLS sessions are reused across the many statements of a sync and across
+/// syncs. Recreating the transport per statement (or per sync) forces a fresh
+/// TCP + TLS handshake each time and makes syncs far slower than the desktop.
+final _httpClientProvider = Provider<http.Client>((ref) {
+  final client = http.Client();
+  ref.onDispose(client.close);
+  return client;
+});
+
 /// The Turso client, or `null` while cloud mode is off or unconfigured.
 ///
-/// Watching the controller means this rebuilds when the mode/credentials
-/// change; the engine reads it lazily through a factory, so the engine itself
-/// is stable.
+/// Only the mode and credentials are selected, so the status churn of every
+/// sync ([SyncState.isSyncing], `lastSyncAt`, `lastError`, `skewWarning`) does
+/// not rebuild this and swap the client out from under an in-flight request.
+/// Rebuilds on a real config change share the same app-lifetime
+/// [_httpClientProvider], so no connection is force-closed mid-request.
+///
+/// The engine reads this lazily through a factory, so the engine itself stays
+/// stable across config changes.
 final tursoClientProvider = Provider<TursoClient?>((ref) {
-  final state = ref.watch(syncControllerProvider);
-  if (!state.canSync) return null;
-  return TursoClient(url: state.url.trim(), token: state.token.trim());
+  final connection = ref.watch(
+    syncControllerProvider.select(
+      (state) => (
+        canSync: state.canSync,
+        url: state.url.trim(),
+        token: state.token.trim(),
+      ),
+    ),
+  );
+  if (!connection.canSync) return null;
+  return TursoClient(
+    url: connection.url,
+    token: connection.token,
+    httpClient: ref.watch(_httpClientProvider),
+  );
 });
 
 /// The sync engine, stable for the app's lifetime.

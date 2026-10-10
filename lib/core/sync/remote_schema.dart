@@ -157,20 +157,32 @@ CREATE INDEX IF NOT EXISTS idx_work_items_project ON work_items (project_id, pos
 
 /// Applies every remote schema statement, mirroring `applyRemoteSchema`.
 ///
-/// Each statement runs independently, so a failure on one (for example the
-/// `duplicate column` error from an `ALTER TABLE ADD COLUMN` that already ran)
-/// does not abort the statements after it. Running the list against a fresh
-/// empty database and an existing one therefore both converge on the frozen
-/// schema.
-Future<void> applyRemoteSchema(Future<void> Function(String sql) exec) async {
-  for (final statement in remoteSchemaStatements) {
-    try {
-      await exec(statement);
-    } catch (error) {
-      final message = error.toString().toLowerCase();
-      if (!message.contains('duplicate column')) {
-        debugPrint('applyRemoteSchema failed for: $statement ($error)');
-      }
+/// [executeBatch] runs all [remoteSchemaStatements] in a single request and
+/// returns, in order, the failure message for any statement that errored (or
+/// `null` on success). The server executes every statement even when some fail,
+/// so an already-applied `ALTER TABLE ADD COLUMN` (a `duplicate column` error)
+/// does not block the statements after it. That expected error is swallowed;
+/// any other failure, and a transport-level failure of the whole batch, is
+/// logged. Running the list against a fresh empty database and an existing one
+/// therefore both converge on the frozen schema.
+Future<void> applyRemoteSchema(
+  Future<List<String?>> Function(List<String> statements) executeBatch,
+) async {
+  final List<String?> errors;
+  try {
+    errors = await executeBatch(remoteSchemaStatements);
+  } catch (error) {
+    debugPrint('applyRemoteSchema failed: $error');
+    return;
+  }
+
+  for (var i = 0; i < errors.length && i < remoteSchemaStatements.length; i++) {
+    final error = errors[i];
+    if (error == null || error.toLowerCase().contains('duplicate column')) {
+      continue;
     }
+    debugPrint(
+      'applyRemoteSchema failed for: ${remoteSchemaStatements[i]} ($error)',
+    );
   }
 }

@@ -80,8 +80,11 @@ class SyncEngine implements RemoteWriteSink {
     await _applyRemoteSchema(client);
   }
 
-  Future<void> _applyRemoteSchema(TursoClient client) =>
-      applyRemoteSchema(client.execute);
+  Future<void> _applyRemoteSchema(TursoClient client) => applyRemoteSchema(
+    (statements) => client.executeBatch([
+      for (final sql in statements) TursoStatement(sql),
+    ]),
+  );
 
   /// Runs one full sync and returns the per-run counts and skew warning.
   ///
@@ -951,10 +954,10 @@ List<QueuedStatement> _entityUpsert(
     SyncEngine._insertSql(table, insertColumns),
     SyncEngine._values(insertColumns, row),
   ),
-  QueuedStatement(
-    SyncEngine._updateSql(table, updateColumns),
-    [...SyncEngine._values(updateColumns, row), row['id']],
-  ),
+  QueuedStatement(SyncEngine._updateSql(table, updateColumns), [
+    ...SyncEngine._values(updateColumns, row),
+    row['id'],
+  ]),
 ];
 
 // Column lists, in the reference schema's order. `*Insert` covers every column
