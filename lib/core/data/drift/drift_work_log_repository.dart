@@ -3,9 +3,11 @@ import 'package:drift/drift.dart';
 import '../../models/work_log.dart';
 import '../../utils/clock.dart';
 import '../../utils/id.dart';
+import '../remote_write_sink.dart';
 import '../repositories.dart';
 import 'database.dart';
 import 'mappers.dart';
+import 'write_mirror.dart';
 
 /// Drift-backed [WorkLogRepository].
 ///
@@ -14,9 +16,16 @@ import 'mappers.dart';
 /// work log's `updated_at`.
 class DriftWorkLogRepository implements WorkLogRepository {
   /// Creates a repository over [database].
-  DriftWorkLogRepository(this._database);
+  ///
+  /// [writeSink] mirrors every write to the remote store; it is always
+  /// installed at runtime and no-ops while sync is unconfigured.
+  DriftWorkLogRepository(this._database, {this.writeSink});
 
   final AppDatabase _database;
+
+  /// Mirrors writes to the remote store; always installed at runtime, no-op
+  /// while sync is unconfigured.
+  final RemoteWriteSink? writeSink;
 
   @override
   Stream<List<WorkLogWithTags>> watchAll() {
@@ -65,6 +74,10 @@ class DriftWorkLogRepository implements WorkLogRepository {
       createdAt: now,
       updatedAt: now,
     );
+    final tagRows = [
+      for (final name in tags)
+        RemoteTagRow(id: newId(), name: name, createdAt: now),
+    ];
     await _database.transaction(() async {
       await _database
           .into(_database.workLogs)
@@ -79,7 +92,23 @@ class DriftWorkLogRepository implements WorkLogRepository {
               updatedAt: Value(workLog.updatedAt),
             ),
           );
-      await _insertTags(workLog.id, tags);
+      await _insertTags(workLog.id, tagRows);
+      // Mirror the create (entity + tags) at mutation time so it reaches the
+      // cloud without waiting for a sync. Enqueued in the same transaction so
+      // the queued intents commit atomically with the local insert.
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.workLogs,
+        id: workLog.id,
+      );
+      await writeSink?.recordTags(
+        parentTable: RemoteTables.workLogs,
+        parentId: workLog.id,
+        childTable: 'work_log_tags',
+        parentColumn: 'work_log_id',
+        rows: tagRows,
+      );
     });
     return WorkLogWithTags(workLog: workLog, tags: List.unmodifiable(tags));
   }
@@ -87,28 +116,52 @@ class DriftWorkLogRepository implements WorkLogRepository {
   @override
   Future<void> update(WorkLog workLog) async {
     // `created_at` is intentionally absent so the stored value is preserved.
-    await (_database.update(
-      _database.workLogs,
-    )..where((w) => w.id.equals(workLog.id))).write(
-      WorkLogsCompanion(
-        title: Value(workLog.title),
-        description: Value(workLog.description),
-        startDate: Value(workLog.startDate),
-        endDate: Value(workLog.endDate),
-        updatedAt: Value(nowIso()),
-      ),
-    );
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.workLogs,
+      )..where((w) => w.id.equals(workLog.id))).write(
+        WorkLogsCompanion(
+          title: Value(workLog.title),
+          description: Value(workLog.description),
+          startDate: Value(workLog.startDate),
+          endDate: Value(workLog.endDate),
+          updatedAt: Value(nowIso()),
+        ),
+      );
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.workLogs,
+        id: workLog.id,
+      );
+    });
   }
 
   @override
   Future<void> setTags(String id, List<String> tags) async {
     // Touches only work_log_tags; the work log's updated_at is deliberately
     // untouched, matching the reference setTagsForWorkLog (LWW safety).
+    final now = nowIso();
+    final rows = [
+      for (final name in tags)
+        RemoteTagRow(id: newId(), name: name, createdAt: now),
+    ];
     await _database.transaction(() async {
       await (_database.delete(
         _database.workLogTags,
       )..where((t) => t.workLogId.equals(id))).go();
-      await _insertTags(id, tags);
+      await _insertTags(id, rows);
+      // Mirror the replacement to the remote so a removed tag is removed
+      // remotely too, instead of being pulled straight back by the insert-only
+      // sync. Enqueued in the same transaction so the queued intent commits
+      // atomically with the local replacement.
+      await writeSink?.recordTags(
+        parentTable: RemoteTables.workLogs,
+        parentId: id,
+        childTable: 'work_log_tags',
+        parentColumn: 'work_log_id',
+        rows: rows,
+      );
     });
   }
 
@@ -121,20 +174,22 @@ class DriftWorkLogRepository implements WorkLogRepository {
       await (_database.delete(
         _database.workLogs,
       )..where((w) => w.id.equals(id))).go();
+      // Enqueue inside the transaction so the queued delete commits atomically
+      // with the local delete (see the todo repository).
+      await writeSink?.recordDelete(RemoteTables.workLogs, id);
     });
   }
 
-  Future<void> _insertTags(String workLogId, List<String> tags) async {
-    final now = nowIso();
-    for (final name in tags) {
+  Future<void> _insertTags(String workLogId, List<RemoteTagRow> rows) async {
+    for (final row in rows) {
       await _database
           .into(_database.workLogTags)
           .insert(
             WorkLogTagsCompanion(
-              id: Value(newId()),
+              id: Value(row.id),
               workLogId: Value(workLogId),
-              name: Value(name),
-              createdAt: Value(now),
+              name: Value(row.name),
+              createdAt: Value(row.createdAt),
             ),
           );
     }

@@ -53,6 +53,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
   List<String> _tags = const [];
   bool _pinned = false;
   bool _preview = false;
+  bool _showTags = false;
   bool _loaded = false;
   bool _missing = false;
   bool _error = false;
@@ -138,9 +139,10 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
     _dirty = true;
     // New input starts a fresh burst, so any previous failure budget resets.
     _saveFailures = 0;
-    // Clear a stale "Saved" as soon as new input arrives, so the indicator
-    // never claims the current text is persisted while the debounce is ticking.
-    if (_status != _SaveStatus.idle) {
+    // Only "Saving..." and "Not saved" are visible (success stays silent), so
+    // only clear those. Going saved/idle -> idle looks identical and must not
+    // rebuild mid-typing.
+    if (_status == _SaveStatus.saving || _status == _SaveStatus.failed) {
       setState(() => _status = _SaveStatus.idle);
     }
     _debounce?.cancel();
@@ -390,6 +392,15 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
                 setState(() => _preview = !_preview);
               },
             ),
+            if (!_preview)
+              FItem(
+                prefix: const Icon(Icons.label_outline),
+                title: Text(_showTags ? 'Hide tags' : 'Tags'),
+                onPress: () {
+                  controller.hide();
+                  setState(() => _showTags = !_showTags);
+                },
+              ),
             FItem(
               prefix: Icon(_pinned ? Icons.push_pin : Icons.push_pin_outlined),
               title: Text(_pinned ? 'Unpin' : 'Pin'),
@@ -418,37 +429,47 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
     if (_error) return const CenteredMessage('Could not load this note.');
     if (!_loaded) return const Center(child: FCircularProgress());
 
-    return Column(
-      // Stretch so the preview's vertical scroll view fills the width. It
-      // shrink-wraps to its content otherwise, and MarkdownBody shrink-wraps a
-      // multi-block note to its widest block, which would center short notes.
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              FTextField(
-                control: FTextFieldControl.managed(
-                  controller: _titleController,
-                  onChange: (_) => _onEdit(),
+        Column(
+          // Stretch so the preview's vertical scroll view fills the width. It
+          // shrink-wraps to its content otherwise, and MarkdownBody shrink-wraps a
+          // multi-block note to its widest block, which would center short notes.
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!_preview)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FTextField(
+                      control: FTextFieldControl.managed(
+                        controller: _titleController,
+                        onChange: (_) => _onEdit(),
+                      ),
+                      hint: 'Title',
+                      textInputAction: .next,
+                    ),
+                    const SizedBox(height: 12),
+                    if (_showTags) ...[
+                      TagEditor(tags: _tags, onChanged: _setTags),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
                 ),
-                hint: 'Title',
-                textInputAction: .next,
               ),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _SaveIndicator(status: _status),
-              ),
-              const SizedBox(height: 8),
-              TagEditor(tags: _tags, onChanged: _setTags),
-              const SizedBox(height: 12),
-            ],
-          ),
+            Expanded(child: _preview ? _buildPreview() : _buildEditor()),
+          ],
         ),
-        Expanded(child: _preview ? _buildPreview() : _buildEditor()),
+        // Floating status: overlaid so it never takes layout space. No gap
+        // when hidden, no shift when shown; success stays silent.
+        if (_status == _SaveStatus.saving || _status == _SaveStatus.failed)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: IgnorePointer(child: _SaveIndicator(status: _status)),
+          ),
       ],
     );
   }
@@ -484,16 +505,44 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
     );
   }
 
+  /// Read-only preview: title, tags (when present), and rendered content.
   Widget _buildPreview() {
+    final title = _titleController.text.trim();
+    final colors = context.theme.colors;
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-      child: MarkdownPreview(content: _contentController.text),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title.isEmpty ? 'Untitled' : title,
+            style: context.theme.typography.display.md.copyWith(
+              color: title.isEmpty ? colors.mutedForeground : colors.foreground,
+              fontStyle: title.isEmpty ? FontStyle.italic : null,
+            ),
+          ),
+          if (_tags.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final tag in _tags)
+                  FBadge(variant: .outline, child: Text(tag)),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          MarkdownPreview(content: _contentController.text),
+        ],
+      ),
     );
   }
 }
 
-/// A small autosave indicator: hidden when idle, otherwise "Saving...",
-/// "Saved", or a muted "Not saved" once retries are exhausted.
+/// A silent autosave badge: only "Saving..." or "Not saved" ever render, as a
+/// floating [FBadge] overlaid by the caller so it takes no layout space.
+/// Idle/saved stay silent.
 class _SaveIndicator extends StatelessWidget {
   const _SaveIndicator({required this.status});
 
@@ -501,19 +550,13 @@ class _SaveIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (status) {
-      _SaveStatus.idle => null,
-      _SaveStatus.saving => 'Saving...',
-      _SaveStatus.saved => 'Saved',
-      _SaveStatus.failed => 'Not saved',
-    };
-    if (label == null) return const SizedBox.shrink();
-
-    return Text(
-      label,
-      style: context.theme.typography.body.xs.copyWith(
-        color: context.theme.colors.mutedForeground,
+    return switch (status) {
+      _SaveStatus.saving => FBadge(child: const Text('Saving...')),
+      _SaveStatus.failed => FBadge(
+        variant: .destructive,
+        child: const Text('Not saved'),
       ),
-    );
+      _SaveStatus.idle || _SaveStatus.saved => const SizedBox.shrink(),
+    };
   }
 }

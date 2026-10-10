@@ -3,9 +3,11 @@ import 'package:drift/drift.dart';
 import '../../models/link.dart';
 import '../../utils/clock.dart';
 import '../../utils/id.dart';
+import '../remote_write_sink.dart';
 import '../repositories.dart';
 import 'database.dart';
 import 'mappers.dart';
+import 'write_mirror.dart';
 
 /// Drift-backed [LinkRepository].
 ///
@@ -15,9 +17,16 @@ import 'mappers.dart';
 /// letting the insert fail).
 class DriftLinkRepository implements LinkRepository {
   /// Creates a repository over [database].
-  DriftLinkRepository(this._database);
+  ///
+  /// [writeSink] mirrors every write to the remote store; it is always
+  /// installed at runtime and no-ops while sync is unconfigured.
+  DriftLinkRepository(this._database, {this.writeSink});
 
   final AppDatabase _database;
+
+  /// Mirrors writes to the remote store; always installed at runtime, no-op
+  /// while sync is unconfigured.
+  final RemoteWriteSink? writeSink;
 
   @override
   Stream<List<LinkWithTags>> watchAll() {
@@ -60,6 +69,10 @@ class DriftLinkRepository implements LinkRepository {
       createdAt: now,
       updatedAt: now,
     );
+    final tagRows = [
+      for (final name in tags)
+        RemoteTagRow(id: newId(), name: name, createdAt: now),
+    ];
     await _database.transaction(() async {
       await _database
           .into(_database.links)
@@ -73,7 +86,23 @@ class DriftLinkRepository implements LinkRepository {
               updatedAt: Value(link.updatedAt),
             ),
           );
-      await _insertTags(link.id, tags);
+      await _insertTags(link.id, tagRows);
+      // Mirror the create (entity + tags) at mutation time so it reaches the
+      // cloud without waiting for a sync. Enqueued in the same transaction so
+      // the queued intents commit atomically with the local insert.
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.links,
+        id: link.id,
+      );
+      await writeSink?.recordTags(
+        parentTable: RemoteTables.links,
+        parentId: link.id,
+        childTable: 'link_tags',
+        parentColumn: 'link_id',
+        rows: tagRows,
+      );
     });
     return LinkWithTags(link: link, tags: List.unmodifiable(tags));
   }
@@ -81,27 +110,51 @@ class DriftLinkRepository implements LinkRepository {
   @override
   Future<void> update(Link link) async {
     // `created_at` is intentionally absent so the stored value is preserved.
-    await (_database.update(
-      _database.links,
-    )..where((l) => l.id.equals(link.id))).write(
-      LinksCompanion(
-        url: Value(link.url),
-        title: Value(link.title),
-        faviconUrl: Value(link.faviconUrl),
-        updatedAt: Value(nowIso()),
-      ),
-    );
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.links,
+      )..where((l) => l.id.equals(link.id))).write(
+        LinksCompanion(
+          url: Value(link.url),
+          title: Value(link.title),
+          faviconUrl: Value(link.faviconUrl),
+          updatedAt: Value(nowIso()),
+        ),
+      );
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.links,
+        id: link.id,
+      );
+    });
   }
 
   @override
   Future<void> setTags(String id, List<String> tags) async {
     // Touches only link_tags; the link's updated_at is deliberately untouched,
     // matching the reference setTagsForLink (LWW safety).
+    final now = nowIso();
+    final rows = [
+      for (final name in tags)
+        RemoteTagRow(id: newId(), name: name, createdAt: now),
+    ];
     await _database.transaction(() async {
       await (_database.delete(
         _database.linkTags,
       )..where((t) => t.linkId.equals(id))).go();
-      await _insertTags(id, tags);
+      await _insertTags(id, rows);
+      // Mirror the replacement to the remote so a removed tag is removed
+      // remotely too, instead of being pulled straight back by the insert-only
+      // sync. Enqueued in the same transaction so the queued intent commits
+      // atomically with the local replacement.
+      await writeSink?.recordTags(
+        parentTable: RemoteTables.links,
+        parentId: id,
+        childTable: 'link_tags',
+        parentColumn: 'link_id',
+        rows: rows,
+      );
     });
   }
 
@@ -124,20 +177,22 @@ class DriftLinkRepository implements LinkRepository {
       await (_database.delete(
         _database.links,
       )..where((l) => l.id.equals(id))).go();
+      // Enqueue inside the transaction so the queued delete commits atomically
+      // with the local delete (see the todo repository).
+      await writeSink?.recordDelete(RemoteTables.links, id);
     });
   }
 
-  Future<void> _insertTags(String linkId, List<String> tags) async {
-    final now = nowIso();
-    for (final name in tags) {
+  Future<void> _insertTags(String linkId, List<RemoteTagRow> rows) async {
+    for (final row in rows) {
       await _database
           .into(_database.linkTags)
           .insert(
             LinkTagsCompanion(
-              id: Value(newId()),
+              id: Value(row.id),
               linkId: Value(linkId),
-              name: Value(name),
-              createdAt: Value(now),
+              name: Value(row.name),
+              createdAt: Value(row.createdAt),
             ),
           );
     }

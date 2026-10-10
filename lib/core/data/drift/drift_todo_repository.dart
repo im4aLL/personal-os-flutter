@@ -3,9 +3,11 @@ import 'package:drift/drift.dart';
 import '../../models/todo.dart';
 import '../../utils/clock.dart';
 import '../../utils/id.dart';
+import '../remote_write_sink.dart';
 import '../repositories.dart';
 import 'database.dart';
 import 'mappers.dart';
+import 'write_mirror.dart';
 
 /// Drift-backed [TodoRepository].
 ///
@@ -14,9 +16,16 @@ import 'mappers.dart';
 /// `archived` crosses the boundary as 0/1.
 class DriftTodoRepository implements TodoRepository {
   /// Creates a repository over [database].
-  DriftTodoRepository(this._database);
+  ///
+  /// [writeSink] mirrors every write to the remote store; it is always
+  /// installed at runtime and no-ops while sync is unconfigured.
+  DriftTodoRepository(this._database, {this.writeSink});
 
   final AppDatabase _database;
+
+  /// Mirrors writes to the remote store; always installed at runtime, no-op
+  /// while sync is unconfigured.
+  final RemoteWriteSink? writeSink;
 
   @override
   Stream<List<Todo>> watchAll() => _watch(
@@ -68,22 +77,33 @@ class DriftTodoRepository implements TodoRepository {
       createdAt: now,
       updatedAt: now,
     );
-    await _database
-        .into(_database.todos)
-        .insert(
-          TodosCompanion(
-            id: Value(todo.id),
-            title: Value(todo.title),
-            description: Value(todo.description),
-            status: Value(todo.status.wire),
-            priority: Value(todo.priority?.wire),
-            dueDate: Value(todo.dueDate),
-            position: Value(todo.position),
-            archived: Value(flagToInt(todo.archived)),
-            createdAt: Value(todo.createdAt),
-            updatedAt: Value(todo.updatedAt),
-          ),
-        );
+    await _database.transaction(() async {
+      await _database
+          .into(_database.todos)
+          .insert(
+            TodosCompanion(
+              id: Value(todo.id),
+              title: Value(todo.title),
+              description: Value(todo.description),
+              status: Value(todo.status.wire),
+              priority: Value(todo.priority?.wire),
+              dueDate: Value(todo.dueDate),
+              position: Value(todo.position),
+              archived: Value(flagToInt(todo.archived)),
+              createdAt: Value(todo.createdAt),
+              updatedAt: Value(todo.updatedAt),
+            ),
+          );
+      // Mirror the create at mutation time so it reaches the cloud without
+      // waiting for a sync. Enqueued in the same transaction so the queued
+      // intent commits atomically with the local insert.
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.todos,
+        id: todo.id,
+      );
+    });
     return todo;
   }
 
@@ -91,20 +111,28 @@ class DriftTodoRepository implements TodoRepository {
   Future<void> update(Todo todo) async {
     // `created_at` is intentionally absent so the stored value is preserved,
     // matching the mock (which reuses the existing createdAt).
-    await (_database.update(
-      _database.todos,
-    )..where((t) => t.id.equals(todo.id))).write(
-      TodosCompanion(
-        title: Value(todo.title),
-        description: Value(todo.description),
-        status: Value(todo.status.wire),
-        priority: Value(todo.priority?.wire),
-        dueDate: Value(todo.dueDate),
-        position: Value(todo.position),
-        archived: Value(flagToInt(todo.archived)),
-        updatedAt: Value(nowIso()),
-      ),
-    );
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.todos,
+      )..where((t) => t.id.equals(todo.id))).write(
+        TodosCompanion(
+          title: Value(todo.title),
+          description: Value(todo.description),
+          status: Value(todo.status.wire),
+          priority: Value(todo.priority?.wire),
+          dueDate: Value(todo.dueDate),
+          position: Value(todo.position),
+          archived: Value(flagToInt(todo.archived)),
+          updatedAt: Value(nowIso()),
+        ),
+      );
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.todos,
+        id: todo.id,
+      );
+    });
   }
 
   @override
@@ -121,9 +149,15 @@ class DriftTodoRepository implements TodoRepository {
 
   @override
   Future<void> delete(String id) async {
-    await (_database.delete(
-      _database.todos,
-    )..where((t) => t.id.equals(id))).go();
+    // Enqueue the mirror inside the transaction so the queued delete commits
+    // atomically with the local delete: a sync pull that runs after the local
+    // change is visible also sees the queued intent and suppresses the row.
+    await _database.transaction(() async {
+      await (_database.delete(
+        _database.todos,
+      )..where((t) => t.id.equals(id))).go();
+      await writeSink?.recordDelete(RemoteTables.todos, id);
+    });
   }
 
   @override
@@ -141,13 +175,27 @@ class DriftTodoRepository implements TodoRepository {
             updatedAt: Value(now),
           ),
         );
+        await mirrorUpsert(
+          _database,
+          writeSink,
+          table: RemoteTables.todos,
+          id: update.id,
+        );
       }
     });
   }
 
   Future<void> _touch(String id, TodosCompanion companion) async {
-    await (_database.update(_database.todos)..where((t) => t.id.equals(id)))
-        .write(companion.copyWith(updatedAt: Value(nowIso())));
+    await _database.transaction(() async {
+      await (_database.update(_database.todos)..where((t) => t.id.equals(id)))
+          .write(companion.copyWith(updatedAt: Value(nowIso())));
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.todos,
+        id: id,
+      );
+    });
   }
 
   Stream<List<Todo>> _watch(

@@ -3,9 +3,11 @@ import 'package:drift/drift.dart';
 import '../../models/project.dart';
 import '../../utils/clock.dart';
 import '../../utils/id.dart';
+import '../remote_write_sink.dart';
 import '../repositories.dart';
 import 'database.dart';
 import 'mappers.dart';
+import 'write_mirror.dart';
 
 /// Drift-backed [ProjectRepository].
 ///
@@ -13,12 +15,21 @@ import 'mappers.dart';
 /// from [nowIso], and `deletePhase` clearing referencing `work_items.phase_id`
 /// in the same transaction (the frozen schema declares that foreign key with no
 /// cascade, so deleting a referenced phase would otherwise be rejected). Work
-/// items survive unphased.
+/// items survive unphased. Phase writes are mirrored to the remote at mutation
+/// time because `project_phases` has no `updated_at` and the sync treats it as
+/// insert-only.
 class DriftProjectRepository implements ProjectRepository {
   /// Creates a repository over [database].
-  DriftProjectRepository(this._database);
+  ///
+  /// [writeSink] mirrors every write to the remote store; it is always
+  /// installed at runtime and no-ops while sync is unconfigured.
+  DriftProjectRepository(this._database, {this.writeSink});
 
   final AppDatabase _database;
+
+  /// Mirrors writes to the remote store; always installed at runtime, no-op
+  /// while sync is unconfigured.
+  final RemoteWriteSink? writeSink;
 
   // -- Projects ---------------------------------------------------------------
 
@@ -56,36 +67,55 @@ class DriftProjectRepository implements ProjectRepository {
       createdAt: now,
       updatedAt: now,
     );
-    await _database
-        .into(_database.projects)
-        .insert(
-          ProjectsCompanion(
-            id: Value(project.id),
-            name: Value(project.name),
-            startDate: Value(project.startDate),
-            weekCount: Value(project.weekCount),
-            position: Value(project.position),
-            createdAt: Value(project.createdAt),
-            updatedAt: Value(project.updatedAt),
-          ),
-        );
+    await _database.transaction(() async {
+      await _database
+          .into(_database.projects)
+          .insert(
+            ProjectsCompanion(
+              id: Value(project.id),
+              name: Value(project.name),
+              startDate: Value(project.startDate),
+              weekCount: Value(project.weekCount),
+              position: Value(project.position),
+              createdAt: Value(project.createdAt),
+              updatedAt: Value(project.updatedAt),
+            ),
+          );
+      // Mirror the create at mutation time so it reaches the cloud without
+      // waiting for a sync. Enqueued in the same transaction so the queued
+      // intent commits atomically with the local insert.
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.projects,
+        id: project.id,
+      );
+    });
     return project;
   }
 
   @override
   Future<void> updateProject(Project project) async {
     // `created_at` is intentionally absent so the stored value is preserved.
-    await (_database.update(
-      _database.projects,
-    )..where((p) => p.id.equals(project.id))).write(
-      ProjectsCompanion(
-        name: Value(project.name),
-        startDate: Value(project.startDate),
-        weekCount: Value(project.weekCount),
-        position: Value(project.position),
-        updatedAt: Value(nowIso()),
-      ),
-    );
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.projects,
+      )..where((p) => p.id.equals(project.id))).write(
+        ProjectsCompanion(
+          name: Value(project.name),
+          startDate: Value(project.startDate),
+          weekCount: Value(project.weekCount),
+          position: Value(project.position),
+          updatedAt: Value(nowIso()),
+        ),
+      );
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.projects,
+        id: project.id,
+      );
+    });
   }
 
   @override
@@ -103,6 +133,9 @@ class DriftProjectRepository implements ProjectRepository {
       await (_database.delete(
         _database.projects,
       )..where((p) => p.id.equals(id))).go();
+      // Enqueue inside the transaction so the queued delete commits atomically
+      // with the local delete (see the todo repository).
+      await writeSink?.recordDelete(RemoteTables.projects, id);
     });
   }
 
@@ -115,6 +148,12 @@ class DriftProjectRepository implements ProjectRepository {
           _database.projects,
         )..where((p) => p.id.equals(orderedIds[i]))).write(
           ProjectsCompanion(position: Value(i), updatedAt: Value(now)),
+        );
+        await mirrorUpsert(
+          _database,
+          writeSink,
+          table: RemoteTables.projects,
+          id: orderedIds[i],
         );
       }
     });
@@ -162,18 +201,28 @@ class DriftProjectRepository implements ProjectRepository {
       position: resolvedPosition,
       createdAt: nowIso(),
     );
-    await _database
-        .into(_database.projectPhases)
-        .insert(
-          ProjectPhasesCompanion(
-            id: Value(phase.id),
-            projectId: Value(phase.projectId),
-            name: Value(phase.name),
-            color: Value(phase.color),
-            position: Value(phase.position),
-            createdAt: Value(phase.createdAt),
-          ),
-        );
+    await _database.transaction(() async {
+      await _database
+          .into(_database.projectPhases)
+          .insert(
+            ProjectPhasesCompanion(
+              id: Value(phase.id),
+              projectId: Value(phase.projectId),
+              name: Value(phase.name),
+              color: Value(phase.color),
+              position: Value(phase.position),
+              createdAt: Value(phase.createdAt),
+            ),
+          );
+      // `project_phases` has no `updated_at`, so the sync treats it as
+      // insert-only and would never propagate the phase. Mirror the create at
+      // mutation time, enqueued in the same transaction so the queued intent
+      // commits atomically with the local insert.
+      await writeSink?.recordUpsert(
+        RemoteTables.projectPhases,
+        _phaseRow(phase),
+      );
+    });
     return phase;
   }
 
@@ -181,35 +230,57 @@ class DriftProjectRepository implements ProjectRepository {
   Future<void> updatePhase(ProjectPhase phase) async {
     // The reference has no updated_at on phases; the mock replaces the row
     // wholesale, so every column is written.
-    await (_database.update(
-      _database.projectPhases,
-    )..where((p) => p.id.equals(phase.id))).write(
-      ProjectPhasesCompanion(
-        projectId: Value(phase.projectId),
-        name: Value(phase.name),
-        color: Value(phase.color),
-        position: Value(phase.position),
-        createdAt: Value(phase.createdAt),
-      ),
-    );
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.projectPhases,
+      )..where((p) => p.id.equals(phase.id))).write(
+        ProjectPhasesCompanion(
+          projectId: Value(phase.projectId),
+          name: Value(phase.name),
+          color: Value(phase.color),
+          position: Value(phase.position),
+          createdAt: Value(phase.createdAt),
+        ),
+      );
+      // Mirror the update at mutation time; without it a rename/color/position
+      // change would never reach the remote. Enqueued in the same transaction
+      // so the queued intent commits atomically with the local update.
+      await writeSink?.recordUpsert(
+        RemoteTables.projectPhases,
+        _phaseRow(phase),
+      );
+    });
   }
 
   @override
   Future<void> deletePhase(String id) async {
     await _database.transaction(() async {
-      final now = nowIso();
       // Unphase referencing items first (no cascade on this FK), preserving the
-      // reference outcome: items survive with a null phase.
-      await (_database.update(
-        _database.workItems,
-      )..where((w) => w.phaseId.equals(id))).write(
-        WorkItemsCompanion(phaseId: const Value(null), updatedAt: Value(now)),
-      );
+      // reference outcome: items survive with a null phase. `updated_at` is
+      // deliberately NOT advanced: the desktop leaves work_items untouched when
+      // it deletes a phase, so stamping it here would push phase_id=null to the
+      // shared remote on the next sync.
+      await (_database.update(_database.workItems)
+            ..where((w) => w.phaseId.equals(id)))
+          .write(WorkItemsCompanion(phaseId: Value(null)));
       await (_database.delete(
         _database.projectPhases,
       )..where((p) => p.id.equals(id))).go();
+      // Enqueue inside the transaction so the queued delete commits atomically
+      // with the local delete (see the todo repository).
+      await writeSink?.recordDelete(RemoteTables.projectPhases, id);
     });
   }
+
+  /// The remote `project_phases` row for [phase], in the schema's column order.
+  Map<String, Object?> _phaseRow(ProjectPhase phase) => {
+    'id': phase.id,
+    'project_id': phase.projectId,
+    'name': phase.name,
+    'color': phase.color,
+    'position': phase.position,
+    'created_at': phase.createdAt,
+  };
 
   // -- Work items -------------------------------------------------------------
 
@@ -261,26 +332,37 @@ class DriftProjectRepository implements ProjectRepository {
       createdAt: now,
       updatedAt: now,
     );
-    await _database
-        .into(_database.workItems)
-        .insert(
-          WorkItemsCompanion(
-            id: Value(item.id),
-            projectId: Value(item.projectId),
-            phaseId: Value(item.phaseId),
-            title: Value(item.title),
-            person: Value(item.person),
-            comment: Value(item.comment),
-            jiraTicket: Value(item.jiraTicket),
-            status: Value(item.status.wire),
-            startWeek: Value(item.startWeek),
-            endWeek: Value(item.endWeek),
-            position: Value(item.position),
-            isSeparator: Value(flagToInt(item.isSeparator)),
-            createdAt: Value(item.createdAt),
-            updatedAt: Value(item.updatedAt),
-          ),
-        );
+    await _database.transaction(() async {
+      await _database
+          .into(_database.workItems)
+          .insert(
+            WorkItemsCompanion(
+              id: Value(item.id),
+              projectId: Value(item.projectId),
+              phaseId: Value(item.phaseId),
+              title: Value(item.title),
+              person: Value(item.person),
+              comment: Value(item.comment),
+              jiraTicket: Value(item.jiraTicket),
+              status: Value(item.status.wire),
+              startWeek: Value(item.startWeek),
+              endWeek: Value(item.endWeek),
+              position: Value(item.position),
+              isSeparator: Value(flagToInt(item.isSeparator)),
+              createdAt: Value(item.createdAt),
+              updatedAt: Value(item.updatedAt),
+            ),
+          );
+      // Mirror the create at mutation time so it reaches the cloud without
+      // waiting for a sync. Enqueued in the same transaction so the queued
+      // intent commits atomically with the local insert.
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.workItems,
+        id: item.id,
+      );
+    });
     final phase = phaseId == null ? null : await _getPhase(phaseId);
     return WorkItemWithPhase(item: item, phase: phase);
   }
@@ -288,31 +370,44 @@ class DriftProjectRepository implements ProjectRepository {
   @override
   Future<void> updateWorkItem(WorkItem item) async {
     // `created_at` is intentionally absent so the stored value is preserved.
-    await (_database.update(
-      _database.workItems,
-    )..where((w) => w.id.equals(item.id))).write(
-      WorkItemsCompanion(
-        projectId: Value(item.projectId),
-        phaseId: Value(item.phaseId),
-        title: Value(item.title),
-        person: Value(item.person),
-        comment: Value(item.comment),
-        jiraTicket: Value(item.jiraTicket),
-        status: Value(item.status.wire),
-        startWeek: Value(item.startWeek),
-        endWeek: Value(item.endWeek),
-        position: Value(item.position),
-        isSeparator: Value(flagToInt(item.isSeparator)),
-        updatedAt: Value(nowIso()),
-      ),
-    );
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.workItems,
+      )..where((w) => w.id.equals(item.id))).write(
+        WorkItemsCompanion(
+          projectId: Value(item.projectId),
+          phaseId: Value(item.phaseId),
+          title: Value(item.title),
+          person: Value(item.person),
+          comment: Value(item.comment),
+          jiraTicket: Value(item.jiraTicket),
+          status: Value(item.status.wire),
+          startWeek: Value(item.startWeek),
+          endWeek: Value(item.endWeek),
+          position: Value(item.position),
+          isSeparator: Value(flagToInt(item.isSeparator)),
+          updatedAt: Value(nowIso()),
+        ),
+      );
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.workItems,
+        id: item.id,
+      );
+    });
   }
 
   @override
   Future<void> deleteWorkItem(String id) async {
-    await (_database.delete(
-      _database.workItems,
-    )..where((w) => w.id.equals(id))).go();
+    // Enqueue the mirror inside the transaction so the queued delete commits
+    // atomically with the local delete (see the todo repository).
+    await _database.transaction(() async {
+      await (_database.delete(
+        _database.workItems,
+      )..where((w) => w.id.equals(id))).go();
+      await writeSink?.recordDelete(RemoteTables.workItems, id);
+    });
   }
 
   @override
@@ -327,6 +422,12 @@ class DriftProjectRepository implements ProjectRepository {
           _database.workItems,
         )..where((w) => w.id.equals(orderedIds[i]))).write(
           WorkItemsCompanion(position: Value(i), updatedAt: Value(now)),
+        );
+        await mirrorUpsert(
+          _database,
+          writeSink,
+          table: RemoteTables.workItems,
+          id: orderedIds[i],
         );
       }
     });

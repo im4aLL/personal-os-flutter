@@ -11,7 +11,7 @@ Mobile port of the Personal OS desktop app (Tauri/React, reference at ../persona
 | Navigation | 5 bottom tabs: Home, Todo, Notes, More, Settings. More hosts Links / Work Log / Projects as entries pushing onto the shell's inner Navigator (nested `Navigator` + `NavigatorPopHandler`) so the bottom bar stays visible |
 | Persistence (Phase 9) | drift, schema mirrors ../personal-os/src/lib/schema.ts (the remote Turso schema) column-for-column |
 | Sync (Phase 10) | Turso via libSQL HTTP API; bidirectional last-write-wins on updated_at; local DB is source of truth |
-| Tests | No broad suite. Targeted high-value tests only: clock/timestamp format, schema conformance vs schema.ts (node script), sync merge (LWW + pending_deletes), plus the Phase 2 Home stream-wiring widget test and the stream-combination test. Otherwise verification = flutter run / release APK + manual inspection; flutter analyze must stay clean |
+| Tests | No broad suite. Targeted high-value tests only: clock/timestamp format, schema conformance vs schema.ts (node script), plus the Phase 2 Home stream-wiring widget test and the stream-combination test. Sync correctness is verified manually via cross-client checks (Flutter/desktop/TUI), not unit tests. Otherwise verification = flutter run / release APK + manual inspection; flutter analyze must stay clean |
 | Theme | Follow system by default; manual System/Light/Dark toggle in Settings (persisted device-locally via shared_preferences, not synced) |
 
 ## Architecture
@@ -39,10 +39,11 @@ Sync strategy (high level, Phase 10):
 
 - Local SQLite is the source of truth; all UI writes go local first; the app works fully offline.
 - Per-table merge: pull remote rows, INSERT OR IGNORE for missing rows and UPDATE only where remote.updated_at > local.updated_at; push local rows where local.updated_at > remote.updated_at (last write wins, row granularity - same as the desktop app).
-- Deletes push immediately at mutation time when online; when offline, record (table, id) in a pending_deletes table. On sync: flush pending_deletes to the remote first, then pull; pulled rows that have a pending delete entry are suppressed so they cannot resurrect (INSERT OR IGNORE alone would re-insert them).
+- Every write (creates, updates, deletes, tag replacements, phase upserts) is mirrored at mutation time when online; when offline it is recorded in a local-only pending_writes queue (one latest intent per (table, row)). Mirrors are best-effort and never block the local write. On sync: flush the queue to the remote first, then pull; pulled rows that have a queued delete (or, for tags, a queued replacement on their parent) are suppressed so they cannot resurrect (INSERT OR IGNORE alone would re-insert them). The user never has to press sync for their own edits to reach the cloud; the Sync button and automatic syncs exist to pull other clients' changes and to flush anything queued while offline.
 - app_settings syncs with the same LWW rule.
 - Clock skew: keep client-stamped timestamps (port fidelity) but on sync compare against Turso server time and warn the user on gross skew (see Risks and notes). This check is read-only: it never rewrites updated_at or any value written to the remote, so the remote data format is unchanged.
-- Known limitation: a delete made on another device while this one is offline can still resurrect the row (pending_deletes covers only this device going offline, not the reverse direction). The desktop app loses all offline deletes; this app improves on that but does not fully solve two-device offline convergence.
+- Known limitation: a delete made on another device while this one is offline can still resurrect the row (pending_writes covers only this device going offline, not the reverse direction). The desktop app loses all offline deletes; this app improves on that but does not fully solve two-device offline convergence.
+- Changing the configured remote (a different Turso URL) clears the local-only pending_writes queue, so queued offline writes are discarded rather than flushed into the new database. A token-only change against the same URL keeps the queue, so a rotated token does not drop queued offline writes. Discarding the queue on a URL change avoids applying one database's stale deletes/upserts to another; the desktop similarly loses offline writes entirely.
 
 ## Folder structure
 
@@ -72,11 +73,11 @@ lib/
     projects/   ui/projects_page.dart, project_gantt.dart, work_item_dialog.dart  providers/
     more/       ui/more_page.dart
     settings/   ui/settings_page.dart    providers/
-test/                             # targeted tests: clock/timestamp, Home stream wiring, stream combination, project repository, tag-timestamp semantics (sync merge in Phase 10)
+test/                             # targeted tests: clock/timestamp, Home stream wiring, stream combination
 tool/                             # schema_conformance.js (diffs schema.ts vs tables.dart + the committed database.g.dart; the Phase 10 remote-DDL port diff activates once that port lands)
 ```
 
-Feature-first: each feature owns ui/ + providers/; shared code lives in core/. test/ holds only the targeted high-value tests (clock/timestamp, the Phase 2 Home stream-wiring and stream-combination tests, and the Phase 10 sync merge tests); tool/schema_conformance.js is the automated schema-drift guard.
+Feature-first: each feature owns ui/ + providers/; shared code lives in core/. test/ holds only the targeted high-value tests (clock/timestamp, the Phase 2 Home stream-wiring and stream-combination tests); tool/schema_conformance.js is the automated schema-drift guard.
 
 ## Data model (mirrors ../personal-os/src/lib/schema.ts)
 
@@ -103,10 +104,10 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 **Schema freeze:**
 
 - The schema is owned by the desktop app (../personal-os/src/lib/schema.ts) and is FROZEN from this app's perspective: never add, rename, drop, or retype a column or table from Flutter. Schema evolution, when needed, is coordinated across all three clients and always additive (nullable column or column with a default, added via the ALTER TABLE ADD COLUMN pattern).
-- Local drift tables are column-for-column identical to the remote schema (same names, types, nullability, CHECK and UNIQUE constraints, foreign keys with ON DELETE CASCADE, and indexes) so sync is a straight copy with no mapping layer. Local-only helper tables (e.g. pending_deletes) are allowed but MUST be clearly marked local-only and MUST never be created on the remote.
+- Local drift tables are column-for-column identical to the remote schema (same names, types, nullability, CHECK and UNIQUE constraints, foreign keys with ON DELETE CASCADE, and indexes) so sync is a straight copy with no mapping layer. Local-only helper tables (e.g. pending_writes) are allowed but MUST be clearly marked local-only and MUST never be created on the remote.
 - Respect remote constraints in app code before writing: CHECK value domains (todos.status in todo/in_progress/completed, todos.priority in low/medium/high, work_items.status in pending/in_progress/done), NOT NULL columns always populated, links.url UNIQUE (handle the duplicate-URL rejection gracefully).
 - Value semantics must match the other clients exactly: YYYY-MM-DD calendar dates, integers for 0/1 flags (archived, pinned, is_separator), week-based integers for Gantt ranges, empty string rather than null where the other clients use '' defaults (e.g. notes.content), and a nullable notes.title where null means "display formatted created_at" (the desktop writes title: null on create; never coerce null to '').
-- No mitigation may change the remote data format. Clock-skew detection is read-only, pending_deletes is local-only (never created on the remote), and the schema conformance check only verifies - none of them may alter the remote schema or rewrite any value written to the remote. The remote DB is the shared contract with the desktop and TUI clients, and it is off-limits to change from this app.
+- No mitigation may change the remote data format. Clock-skew detection is read-only, pending_writes is local-only (never created on the remote), and the schema conformance check only verifies - none of them may alter the remote schema or rewrite any value written to the remote. The remote DB is the shared contract with the desktop and TUI clients, and it is off-limits to change from this app.
 
 **Client behavior:**
 
@@ -114,7 +115,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 - **Explicit timestamps on every write**: never rely on DB column defaults (the reference app_settings has DEFAULT (datetime('now')) which produces a different space-separated format; letting defaults fire anywhere corrupts string comparison).
 - **IDs**: UUID v4, lowercase, hyphenated (uuid package matches crypto.randomUUID()).
 - **Remote DDL**: the app ships a verbatim Dart port of REMOTE_SCHEMAS from ../personal-os/src/lib/schema.ts - every CREATE TABLE IF NOT EXISTS (columns, nullability, defaults, CHECK and UNIQUE constraints), every CREATE INDEX IF NOT EXISTS, and the additive ALTER TABLE ADD COLUMN statements. Execution mirrors applyRemoteSchema: statements run one by one and "duplicate column" errors are ignored, so the same list works against a fresh empty DB and an existing one. Running it against a fresh empty Turso DB MUST produce the same tables, columns, and indexes the desktop app would create - the mobile app can bootstrap a new remote database with no other client involved. When schema.ts changes upstream, the Dart port is updated in the same commit.
-- **Sync semantics**: port of ../personal-os/src/lib/sync.ts - per-table LWW via string-compared updated_at, tag tables INSERT OR IGNORE both ways (no tombstones), deletes pushed at mutation time when online. One deliberate extension beyond the desktop: a local-only pending_deletes table queues offline deletes (the desktop simply loses them); see the sync strategy above for flush and pull-suppression ordering.
+- **Sync semantics**: port of ../personal-os/src/lib/sync.ts - per-table LWW via string-compared updated_at, tag tables INSERT OR IGNORE both ways (no tombstones), deletes pushed at mutation time when online. One deliberate extension beyond the desktop: a local-only pending_writes table queues offline deletes, tag replacements, and phase upserts (the desktop simply loses offline writes); see the sync strategy above for flush and pull-suppression ordering.
 - **app_settings is shared state across clients**: any key this app writes propagates to desktop/TUI and vice versa. Namespace mobile-local keys (e.g. mobile.*) and reuse existing keys only when sharing is intended. Turso credentials and theme mode are NOT stored here - they are device-local on every client (see Phases 8 and 10).
 
 ## Dependencies
@@ -141,7 +142,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 - [x] Phase 7 - Projects (week Gantt)
 - [x] Phase 8 - Enrichment: link metadata + persisted settings + empty states
 - [x] Phase 9 - Drift persistence
-- [ ] Phase 10 - Turso sync
+- [x] Phase 10 - Turso sync
 - [ ] Phase 11 - Polish + APK
 
 ## Phases
@@ -302,12 +303,12 @@ Goal: optional cloud sync sharing one Turso DB with the desktop and TUI apps (se
 Scope:
 - Settings: app mode local vs cloud; Turso URL + auth token fields (entered per device and stored device-locally, never in app_settings - the desktop keeps these in localStorage, so they do NOT propagate across clients; secure token storage is deferred to a later phase).
 - core/sync/turso_client.dart: minimal libSQL HTTP API client (execute + select).
-- core/sync/sync_engine.dart: per-table bidirectional LWW merge on updated_at (port of ../personal-os/src/lib/sync.ts), ensure-remote-schema step (verbatim Dart port of REMOTE_SCHEMAS from ../personal-os/src/lib/schema.ts, runs on cloud-mode setup and before every sync), pending_deletes queue for offline deletes (mobile extension beyond the desktop), clock-skew check against Turso server time with a user warning, manual Sync now button + sync on app resume.
+- core/sync/sync_engine.dart: per-table bidirectional LWW merge on updated_at (port of ../personal-os/src/lib/sync.ts), ensure-remote-schema step (verbatim Dart port of REMOTE_SCHEMAS from ../personal-os/src/lib/schema.ts, runs on cloud-mode setup and before every sync), pending_writes outbound queue mirroring every local write at mutation time (mobile extension beyond the desktop, which only mirrors deletes), clock-skew check against Turso server time with a user warning, manual Sync now button + automatic syncs (1-minute timer, app resume, background/detach). Mutation-time mirrors replay the sync's own column lists, so the cloud converges without waiting for a sync. Automatic syncs run only when `hasChanges` sees a possible change (queued writes, local rows newer than last sync, or differing remote count/max-timestamp aggregates); manual syncs and config changes always run.
 - Cross-client verification pass: create/edit/delete the same rows from Flutter, desktop, and TUI; confirm convergence and identical timestamp formats in the remote rows.
 - Fresh-DB bootstrap verification: point the app at a new empty Turso database, enable cloud mode, and confirm ensure-remote-schema creates every table, column, and index exactly as the desktop app would (diff sqlite_master / PRAGMA table_info output against a desktop-created DB).
-- Targeted sync merge tests: LWW ordering on updated_at, pending_deletes flush-before-pull + pull suppression, and timestamp-string comparison edge cases (microsecond vs millisecond).
+- Sync correctness (LWW ordering, queued-write flush-before-pull + pull suppression, tag removal, phase edit propagation) is verified manually via the cross-client checks above; this repo does not add sync-merge unit tests.
 
-Done when: a fresh empty Turso DB bootstrapped by the mobile app has the complete schema (tables, columns, indexes) identical to a desktop-created one; with cloud mode enabled, changes made on any client (Flutter, desktop, TUI) appear on the others after sync and vice versa; deletes propagate while online; app fully functional with sync disabled; targeted sync merge tests pass; analyze clean.
+Done when: a fresh empty Turso DB bootstrapped by the mobile app has the complete schema (tables, columns, indexes) identical to a desktop-created one; with cloud mode enabled, changes made on any client (Flutter, desktop, TUI) appear on the others after sync and vice versa; deletes propagate while online; tag removals and phase edits converge across clients; app fully functional with sync disabled; analyze clean.
 
 Deferred: background isolate sync, incremental cursors, secure token storage.
 
@@ -330,7 +331,7 @@ Done when: release APK installs on the phone and all features work offline; sync
 - Turso sync, app mode, remote schema setup.
 - HTTP page-title fetch (until Phase 8), accounts, auth, multi-user.
 - Notifications, reminders, home-screen widgets, export/backup.
-- Broad automated test coverage and CI. (Targeted high-value tests for timestamp, schema conformance, and sync merge are in scope - see Tests decision and Phases 2/9/10.)
+- Broad automated test coverage and CI. (Targeted high-value tests for timestamp and schema conformance are in scope - see Tests decision and Phases 2/9.)
 - iOS-specific work (code must stay platform-agnostic; no Android-only APIs).
 
 ## Risks and notes
@@ -338,11 +339,13 @@ Done when: release APK installs on the phone and all features work offline; sync
 - Flutter 3.47+ is required (ForUI 0.27+ needs 3.47+, and the shared_preferences stack needs 3.44+); check `flutter --version` before Phase 0. ForUI is pre-1.0: minors can break; pin the version, upgrade with `flutter pub upgrade forui --major-versions` and apply `dart fix --apply`.
 - flutter_markdown is the pragmatic preview choice but low-activity; isolate it behind the MarkdownPreview wrapper so swapping packages later is a one-file change.
 - Gantt on phones: horizontal scroll + dialog editing only; if week_count grows large, build columns lazily (fixed-extent list) to avoid jank.
-- LWW sync limitation: deletes made on another device while this device is offline can resurrect rows; pending_deletes covers this device going offline, not the reverse direction. An improvement over the desktop (which loses offline deletes entirely), but not full two-device offline convergence.
+- LWW sync limitation: deletes made on another device while this device is offline can resurrect rows; pending_writes covers this device going offline, not the reverse direction. An improvement over the desktop (which loses offline deletes entirely), but not full two-device offline convergence.
+- The mirror enqueue commits atomically with the local mutation: the sink enqueues the pending_writes intent inside the same local transaction as the write, so a sync pull cannot see the local change without also seeing its queued intent, and a crash cannot commit the local write while dropping the mirror. The enqueue itself is still best-effort: a rare local enqueue failure is logged and the mirror is skipped while the local mutation still succeeds. A remote flush failure remains best-effort and stays queued for the next sync.
+- Remote project deletion relies on Turso enforcing ON DELETE CASCADE for project_phases and work_items; the local repository deletes those children explicitly. This mirrors the desktop (parity, not a regression), but if the remote connection does not enforce foreign keys the delete leaves orphaned phases and work items, so the Phase 10 cross-client verification must confirm FK enforcement on the remote.
 - Multi-client clock skew: LWW on updated_at means a device with a wrong clock can win or lose edits incorrectly. Keep client-stamped timestamps (port fidelity) but on sync compare against Turso server time and warn the user on gross skew; also keep the phone on automatic date/time.
 - app_settings key collisions across clients are silent: a mobile key that accidentally matches a desktop key will overwrite it via LWW. Follow the namespacing rule in the compatibility contract.
 - Schema drift is the highest-severity risk in this project: one wrong column or value format from Flutter breaks the desktop and TUI clients. Mitigations: binding compatibility contract, the automated schema conformance script (Phase 9) that diffs schema.ts against tables.dart and the committed database.g.dart on every commit (the remote-DDL port is added to that diff in Phase 10), Dart enums enforcing CHECK value domains, and the cross-client verification pass in Phase 10 before sync is considered done.
 - InMemoryStore must use a broadcast StreamController; a single-subscription stream breaks the second listener (dashboard + feature page).
 - Tag edits are insert-only (delete all + re-insert on save) to match the reference schema and keep sync simple.
 - Offline tag and phase edits do not fully converge: tags are insert-only with no tombstones, so an offline tag edit (delete-all + re-insert) leaves stale tags that resurrect on pull; project_phases has no updated_at and no tombstone, and phase edits/deletes rely on immediate remote mirroring that is silently dropped offline. Matches the desktop app; treat tag and phase edits as best-effort when offline. Accepted decision: the schema freeze rules out adding tombstones/updated_at, so this parity is intended, not a gap.
-- No broad unit-test suite is deliberate; the targeted high-value areas get tests - clock/timestamp, schema conformance, Home stream wiring, stream combination, and tag-timestamp semantics, plus sync merge in Phase 10 - and everything else is compensated with analyze-clean plus the per-phase Done-when checklist executed manually on every phase.
+- No broad unit-test suite is deliberate; the targeted high-value areas get tests - clock/timestamp, schema conformance, Home stream wiring, and stream combination - and everything else is compensated with analyze-clean plus the per-phase Done-when checklist executed manually on every phase. Sync correctness is verified manually via the cross-client checks in Phase 10, not unit tests.
