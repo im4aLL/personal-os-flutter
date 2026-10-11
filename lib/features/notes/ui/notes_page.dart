@@ -107,7 +107,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                           .read(noteFilterProvider.notifier)
                           .setQuery(value.text),
                     ),
-                    hint: 'Search notes',
+                    hint: 'Search title or tag',
                     autofocus: true,
                     // Forui paints its own clear button when the predicate
                     // holds; clearing routes back through [onChange], so the
@@ -128,20 +128,26 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                   loading: () => const Center(child: FCircularProgress()),
                   error: (_, _) =>
                       const CenteredMessage('Could not load notes.'),
-                  data: (items) => ListView(
+                  data: (items) {
                     // Extra bottom padding clears the floating add button.
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
-                    children: [
-                      if (items.isEmpty)
-                        AppEmptyState(_emptyMessage(query))
-                      else
-                        for (final note in items)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: NoteCard(note: note),
-                          ),
-                    ],
-                  ),
+                    const padding = EdgeInsets.fromLTRB(16, 4, 16, 88);
+                    if (items.isEmpty) {
+                      return ListView(
+                        padding: padding,
+                        children: [AppEmptyState(_emptyMessage(query))],
+                      );
+                    }
+                    // Lazy: only visible cards are built and laid out, so a long
+                    // list does not pay for every NoteCard on each rebuild.
+                    return ListView.builder(
+                      padding: padding,
+                      itemCount: items.length,
+                      itemBuilder: (context, index) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: NoteCard(note: items[index]),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],

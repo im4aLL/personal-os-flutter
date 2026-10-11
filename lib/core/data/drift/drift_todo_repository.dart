@@ -63,21 +63,24 @@ class DriftTodoRepository implements TodoRepository {
     TodoStatus status = TodoStatus.todo,
     TodoPriority? priority,
     String? dueDate,
-    int position = 0,
+    int? position,
   }) async {
     final now = nowIso();
-    final todo = Todo(
-      id: newId(),
-      title: title,
-      description: description,
-      status: status,
-      priority: priority,
-      dueDate: dueDate,
-      position: position,
-      createdAt: now,
-      updatedAt: now,
-    );
+    late Todo todo;
     await _database.transaction(() async {
+      todo = Todo(
+        id: newId(),
+        title: title,
+        description: description,
+        status: status,
+        priority: priority,
+        dueDate: dueDate,
+        // Read inside the transaction so a concurrent append cannot observe
+        // the same max position.
+        position: position ?? await _nextPositionFor(status),
+        createdAt: now,
+        updatedAt: now,
+      );
       await _database
           .into(_database.todos)
           .insert(
@@ -136,8 +139,30 @@ class DriftTodoRepository implements TodoRepository {
   }
 
   @override
-  Future<void> setStatus(String id, TodoStatus status) =>
-      _touch(id, TodosCompanion(status: Value(status.wire)));
+  Future<void> setStatus(String id, TodoStatus status) async {
+    await _database.transaction(() async {
+      final row =
+          await (_database.select(_database.todos)
+                ..where((t) => t.id.equals(id)))
+              .getSingleOrNull();
+      if (row == null || row.status == status.wire) return;
+      final position = await _nextPositionFor(status);
+      await (_database.update(_database.todos)..where((t) => t.id.equals(id)))
+          .write(
+            TodosCompanion(
+              status: Value(status.wire),
+              position: Value(position),
+              updatedAt: Value(nowIso()),
+            ),
+          );
+      await mirrorUpsert(
+        _database,
+        writeSink,
+        table: RemoteTables.todos,
+        id: id,
+      );
+    });
+  }
 
   @override
   Future<void> archive(String id) =>
@@ -183,6 +208,20 @@ class DriftTodoRepository implements TodoRepository {
         );
       }
     });
+  }
+
+  /// One past the largest [position] among non-archived [status] todos, so an
+  /// appended todo lands after every existing sibling (0 when none exist).
+  Future<int> _nextPositionFor(TodoStatus status) async {
+    final maxPosition = _database.todos.position.max();
+    final query = _database.selectOnly(_database.todos)
+      ..addColumns([maxPosition])
+      ..where(
+        _database.todos.status.equals(status.wire) &
+            _database.todos.archived.equals(0),
+      );
+    final row = await query.getSingle();
+    return (row.read(maxPosition) ?? -1) + 1;
   }
 
   Future<void> _touch(String id, TodosCompanion companion) async {

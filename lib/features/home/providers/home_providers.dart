@@ -45,9 +45,10 @@ final openTodoCountProvider = Provider<int>(
   (ref) => ref.watch(openTodosProvider).length,
 );
 
-/// All notes with tags.
-final notesProvider = StreamProvider<List<NoteWithTags>>(
-  (ref) => ref.watch(noteRepositoryProvider).watchAll(),
+/// All notes' metadata with tags (the dashboard needs only titles and counts,
+/// so bodies are never loaded).
+final notesProvider = StreamProvider<List<NoteSummary>>(
+  (ref) => ref.watch(noteRepositoryProvider).watchSummaries(),
 );
 
 /// All links with tags.
@@ -118,7 +119,7 @@ class RecentActivity {
 
 /// The five most recently updated notes, links, and work logs, merged.
 final recentActivityProvider = Provider<List<RecentActivity>>((ref) {
-  final notes = ref.watch(notesProvider).value ?? const <NoteWithTags>[];
+  final notes = ref.watch(notesProvider).value ?? const <NoteSummary>[];
   final links = ref.watch(linksProvider).value ?? const <LinkWithTags>[];
   final logs = ref.watch(workLogsProvider).value ?? const <WorkLogWithTags>[];
 
@@ -126,7 +127,7 @@ final recentActivityProvider = Provider<List<RecentActivity>>((ref) {
     for (final note in notes)
       RecentActivity(
         type: ActivityType.note,
-        title: noteDisplayTitle(note.note),
+        title: noteSummaryDisplayTitle(note),
         updatedAt: note.updatedAt,
       ),
     for (final link in links)

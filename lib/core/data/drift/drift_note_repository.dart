@@ -29,20 +29,28 @@ class DriftNoteRepository implements NoteRepository {
   final RemoteWriteSink? writeSink;
 
   @override
-  Stream<List<NoteWithTags>> watchAll() {
-    final query =
-        _database.select(_database.notes).join([
-          leftOuterJoin(
-            _database.noteTags,
-            _database.noteTags.noteId.equalsExp(_database.notes.id),
-          ),
-        ])..orderBy([
-          OrderingTerm.desc(_database.notes.pinned),
-          OrderingTerm.desc(_database.notes.updatedAt),
-          OrderingTerm.asc(_database.noteTags.createdAt),
-          OrderingTerm.asc(_noteTagsRowId),
-        ]);
-    return query.watch().map(_group);
+  Stream<List<NoteSummary>> watchSummaries() {
+    // Only metadata columns are selected: `notes.content` is intentionally
+    // absent so the stream never materializes note bodies.
+    final notes = _database.notes;
+    final noteTags = _database.noteTags;
+    final query = _database.selectOnly(notes)
+      ..join([leftOuterJoin(noteTags, noteTags.noteId.equalsExp(notes.id))])
+      ..addColumns([
+        notes.id,
+        notes.title,
+        notes.pinned,
+        notes.createdAt,
+        notes.updatedAt,
+        noteTags.name,
+      ])
+      ..orderBy([
+        OrderingTerm.desc(notes.pinned),
+        OrderingTerm.desc(notes.updatedAt),
+        OrderingTerm.asc(noteTags.createdAt),
+        OrderingTerm.asc(_noteTagsRowId),
+      ]);
+    return query.watch().map(_groupSummaries);
   }
 
   @override
@@ -233,24 +241,35 @@ class DriftNoteRepository implements NoteRepository {
     return List.unmodifiable([for (final row in rows) row.name]);
   }
 
-  List<NoteWithTags> _group(List<TypedResult> rows) {
+  List<NoteSummary> _groupSummaries(List<TypedResult> rows) {
     final order = <String>[];
-    final notes = <String, Note>{};
+    final byId = <String, TypedResult>{};
     final tags = <String, List<String>>{};
     for (final row in rows) {
-      final noteRow = row.readTable(_database.notes);
-      final tagRow = row.readTableOrNull(_database.noteTags);
-      if (!notes.containsKey(noteRow.id)) {
-        notes[noteRow.id] = noteFromRow(noteRow);
-        tags[noteRow.id] = <String>[];
-        order.add(noteRow.id);
+      final id = row.read(_database.notes.id)!;
+      if (!byId.containsKey(id)) {
+        byId[id] = row;
+        tags[id] = <String>[];
+        order.add(id);
       }
-      if (tagRow != null) tags[noteRow.id]!.add(tagRow.name);
+      final tagName = row.read(_database.noteTags.name);
+      if (tagName != null) tags[id]!.add(tagName);
     }
-    return [
-      for (final id in order)
-        NoteWithTags(note: notes[id]!, tags: List.unmodifiable(tags[id]!)),
-    ];
+    final summaries = <NoteSummary>[];
+    for (final id in order) {
+      final row = byId[id]!;
+      summaries.add(
+        NoteSummary(
+          id: id,
+          title: row.read(_database.notes.title),
+          pinned: flagFromInt(row.read(_database.notes.pinned)!),
+          createdAt: row.read(_database.notes.createdAt)!,
+          updatedAt: row.read(_database.notes.updatedAt)!,
+          tags: List.unmodifiable(tags[id]!),
+        ),
+      );
+    }
+    return summaries;
   }
 }
 

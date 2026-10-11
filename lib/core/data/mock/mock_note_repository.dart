@@ -15,8 +15,8 @@ class MockNoteRepository implements NoteRepository {
   final InMemoryStore<NoteWithTags> _store;
 
   @override
-  Stream<List<NoteWithTags>> watchAll() =>
-      _store.watch().map(_sorted);
+  Stream<List<NoteSummary>> watchSummaries() =>
+      _store.watch().map(_sortedSummaries);
 
   @override
   Future<NoteWithTags?> getById(String id) async {
@@ -108,13 +108,25 @@ class MockNoteRepository implements NoteRepository {
     });
   }
 
-  static List<NoteWithTags> _sorted(Iterable<NoteWithTags> items) {
+  /// Projects stored notes to list metadata, pinned first then most recently
+  /// updated.
+  static List<NoteSummary> _sortedSummaries(Iterable<NoteWithTags> items) {
     final sorted = List<NoteWithTags>.of(items)
       ..sort((a, b) {
         if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
         return b.updatedAt.compareTo(a.updatedAt);
       });
-    return sorted;
+    return [
+      for (final item in sorted)
+        NoteSummary(
+          id: item.id,
+          title: item.title,
+          pinned: item.pinned,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+          tags: List.unmodifiable(item.tags),
+        ),
+    ];
   }
 }
 

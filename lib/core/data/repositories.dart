@@ -24,19 +24,26 @@ abstract interface class TodoRepository {
   Future<Todo?> getById(String id);
 
   /// Creates a todo with a new id and timestamps.
+  ///
+  /// Positions are scoped per status: an omitted [position] appends to the end
+  /// of [status] (one past the current maximum), so a new todo never collides
+  /// with a position left behind by a reorder.
   Future<Todo> create({
     required String title,
     String? description,
     TodoStatus status = TodoStatus.todo,
     TodoPriority? priority,
     String? dueDate,
-    int position = 0,
+    int? position,
   });
 
   /// Replaces [todo] by id and stamps `updated_at`.
   Future<void> update(Todo todo);
 
   /// Sets the status of the todo with [id].
+  ///
+  /// Moving to a different status appends the todo to the end of the
+  /// destination status. It is a no-op when the status already matches.
   Future<void> setStatus(String id, TodoStatus status);
 
   /// Soft-deletes (archives) the todo with [id].
@@ -54,9 +61,14 @@ abstract interface class TodoRepository {
 
 /// Read/write access to notes and their tags.
 abstract interface class NoteRepository {
-  /// Watches all notes with their tags, pinned first then most recently
+  /// Watches note metadata (no `content`), pinned first then most recently
   /// updated.
-  Stream<List<NoteWithTags>> watchAll();
+  ///
+  /// Content is deliberately excluded: lists render title, tags, pin, and
+  /// timestamps only, and the body is fetched on demand by [getById] when the
+  /// editor opens it. This keeps a list refresh (e.g. an autosave elsewhere)
+  /// from re-reading every note body.
+  Stream<List<NoteSummary>> watchSummaries();
 
   /// Returns the note with [id] and its tags, or `null`.
   Future<NoteWithTags?> getById(String id);

@@ -126,13 +126,60 @@ class NoteWithTags {
       NoteWithTags(note: note ?? this.note, tags: tags ?? this.tags);
 }
 
+/// The list-facing metadata of a note: everything a note list renders, without
+/// the (potentially large) [Note.content].
+///
+/// Lists read summaries instead of full notes so a body is never loaded until
+/// the editor opens it via `NoteRepository.getById`. This keeps a list refresh
+/// (e.g. an autosave elsewhere) from re-reading every note body.
+class NoteSummary {
+  /// Creates a [NoteSummary].
+  const NoteSummary({
+    required this.id,
+    this.title,
+    this.pinned = false,
+    required this.createdAt,
+    required this.updatedAt,
+    this.tags = const [],
+  });
+
+  /// UUID primary key.
+  final String id;
+
+  /// Optional title (`title TEXT`, nullable); see [noteSummaryDisplayTitle].
+  final String? title;
+
+  /// Pinned flag.
+  final bool pinned;
+
+  /// Millisecond-precision UTC ISO-8601 creation timestamp.
+  final String createdAt;
+
+  /// Millisecond-precision UTC ISO-8601 last-write timestamp.
+  final String updatedAt;
+
+  /// Tag names in insertion order.
+  final List<String> tags;
+}
+
 /// Returns the display title for a note.
 ///
 /// Falls back to the formatted creation timestamp when [title] is null or
 /// blank, matching the reference `noteDisplayTitle`.
-String noteDisplayTitle(Note note) {
-  final title = note.title?.trim();
-  if (title != null && title.isNotEmpty) return title;
-  final created = DateTime.parse(note.createdAt).toLocal();
+String noteDisplayTitle(Note note) => _displayTitle(note.title, note.createdAt);
+
+/// Returns the display title for a [NoteSummary].
+///
+/// Mirrors [noteDisplayTitle] so the list and the editor label a note
+/// identically.
+String noteSummaryDisplayTitle(NoteSummary note) =>
+    _displayTitle(note.title, note.createdAt);
+
+/// Shared display-title rule: [title] when non-blank, otherwise [createdAt]
+/// formatted in local time.
+String _displayTitle(String? title, String createdAt) {
+  final trimmed = title?.trim();
+  if (trimmed != null && trimmed.isNotEmpty) return trimmed;
+  final created = DateTime.parse(createdAt).toLocal();
   return DateFormat.yMMMd().add_jm().format(created);
 }

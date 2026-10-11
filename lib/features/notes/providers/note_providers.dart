@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/data/repository_providers.dart';
 import '../../../core/models/note.dart';
 
-/// All notes with tags, pinned first then most recently updated.
+/// All notes' metadata with tags, pinned first then most recently updated.
 ///
 /// Distinct from Home's `notesProvider` so the Notes tab can narrow to a search
-/// query without touching the dashboard's counts or recent activity.
-final notesWithTagsProvider = StreamProvider<List<NoteWithTags>>(
-  (ref) => ref.watch(noteRepositoryProvider).watchAll(),
+/// query without touching the dashboard's counts or recent activity. Bodies are
+/// intentionally absent: the editor fetches the one it opens via
+/// `NoteRepository.getById`, so a list refresh never re-reads every note body.
+final noteSummariesProvider = StreamProvider<List<NoteSummary>>(
+  (ref) => ref.watch(noteRepositoryProvider).watchSummaries(),
 );
 
 /// Filter state for the Notes tab.
@@ -22,7 +24,7 @@ class NoteFilter {
   /// Creates a [NoteFilter].
   const NoteFilter({this.query = '', this.showSearch = false});
 
-  /// Text matched (case-insensitively) against title, content, and tags.
+  /// Text matched (case-insensitively) against title and tags.
   final String query;
 
   /// Whether the search field is visible in the header.
@@ -60,30 +62,32 @@ final noteFilterProvider = NotifierProvider<NoteNotifier, NoteFilter>(
   NoteNotifier.new,
 );
 
-/// Whether [note] matches [query] (case-insensitive title/content/tag match).
-bool _matchesQuery(NoteWithTags note, String query) {
+/// Whether [note]'s title or tags match [query] (case-insensitive).
+///
+/// Body content is not searched: it is not loaded into the list (see
+/// [noteSummariesProvider]).
+bool _matchesQuery(NoteSummary note, String query) {
   final needle = query.trim().toLowerCase();
   if (needle.isEmpty) return true;
-  final title = note.note.title;
+  final title = note.title;
   if (title != null && title.toLowerCase().contains(needle)) return true;
-  if (note.content.toLowerCase().contains(needle)) return true;
   for (final tag in note.tags) {
     if (tag.toLowerCase().contains(needle)) return true;
   }
   return false;
 }
 
-/// Notes with tags narrowed by the shared search query.
+/// Note summaries narrowed by the shared search query.
 ///
-/// Derives from [notesWithTagsProvider] so the query narrows the existing
+/// Derives from [noteSummariesProvider] so the query narrows the existing
 /// stream instead of opening a second repository subscription, and preserves
 /// its order: the repository already sorts pinned-first then
 /// most-recently-updated, so a create/edit/pin/tag/delete updates the list
 /// without a refresh.
-final filteredNotesProvider = Provider<AsyncValue<List<NoteWithTags>>>((ref) {
+final filteredNotesProvider = Provider<AsyncValue<List<NoteSummary>>>((ref) {
   final query = ref.watch(noteFilterProvider.select((filter) => filter.query));
   return ref
-      .watch(notesWithTagsProvider)
+      .watch(noteSummariesProvider)
       .whenData(
         (notes) => [
           for (final note in notes)
