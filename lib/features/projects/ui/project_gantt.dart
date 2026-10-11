@@ -194,31 +194,106 @@ class _WeekHeaderRow extends StatelessWidget {
     return SizedBox(
       width: totalWidth,
       height: ganttHeaderHeight,
-      child: Row(
+      child: Stack(
         children: [
-          SizedBox(
-            width: ganttLabelWidth,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                'Task',
-                style: theme.typography.body.sm.copyWith(
-                  color: theme.colors.mutedForeground,
-                  fontWeight: FontWeight.w600,
+          // One painter draws every week cell's left border and the current
+          // week's tint, replacing a decorated Container per week.
+          Positioned(
+            left: ganttLabelWidth,
+            top: 0,
+            child: SizedBox(
+              width: weekCount * ganttCellWidth,
+              height: ganttHeaderHeight,
+              child: CustomPaint(
+                painter: _WeekGridPainter(
+                  weekCount: weekCount,
+                  currentWeek: currentWeek,
+                  borderColor: theme.colors.border,
+                  highlightColor: theme.colors.primary.withValues(alpha: 0.14),
                 ),
               ),
             ),
           ),
-          for (var week = 1; week <= weekCount; week++)
-            _WeekHeaderCell(
-              week: week,
-              date: weekStartDate(project, week),
-              highlighted: week == currentWeek,
-            ),
+          Row(
+            children: [
+              SizedBox(
+                width: ganttLabelWidth,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    'Task',
+                    style: theme.typography.body.sm.copyWith(
+                      color: theme.colors.mutedForeground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              for (var week = 1; week <= weekCount; week++)
+                _WeekHeaderCell(
+                  week: week,
+                  date: weekStartDate(project, week),
+                  highlighted: week == currentWeek,
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
+}
+
+/// Paints the static week grid behind a row: a 1px left border at every week
+/// column's start and, when set, the current-week highlight tint filling that
+/// column.
+///
+/// This reproduces the per-week `Container` decoration (background color first,
+/// then the left border on top, exactly as `BoxDecoration` paints) in a single
+/// pass, so a wide project no longer builds one decorated box per week per row.
+/// [highlightColor] carries the row's tint (rows use a lighter alpha than the
+/// header); when [currentWeek] is null or out of range, no tint is drawn.
+class _WeekGridPainter extends CustomPainter {
+  const _WeekGridPainter({
+    required this.weekCount,
+    required this.currentWeek,
+    required this.borderColor,
+    required this.highlightColor,
+  });
+
+  final int weekCount;
+  final int? currentWeek;
+  final Color borderColor;
+  final Color highlightColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final highlight = currentWeek;
+    if (highlight != null && highlight >= 1 && highlight <= weekCount) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          (highlight - 1) * ganttCellWidth,
+          0,
+          ganttCellWidth,
+          size.height,
+        ),
+        Paint()..color = highlightColor,
+      );
+    }
+    final borderPaint = Paint()..color = borderColor;
+    for (var week = 0; week < weekCount; week++) {
+      canvas.drawRect(
+        Rect.fromLTWH(week * ganttCellWidth, 0, 1, size.height),
+        borderPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WeekGridPainter old) =>
+      old.weekCount != weekCount ||
+      old.currentWeek != currentWeek ||
+      old.borderColor != borderColor ||
+      old.highlightColor != highlightColor;
 }
 
 /// One week header cell: `W<n>` on the first line and the week's start date
@@ -240,42 +315,39 @@ class _WeekHeaderCell extends StatelessWidget {
     final theme = context.theme;
     final start = date;
     // Two lines: the week number over the date. The date uses a smaller font
-    // and never wraps, so it stays `Sep 28` rather than `Sep` / `28`.
-    return Container(
+    // and never wraps, so it stays `Sep 28` rather than `Sep` / `28`. The
+    // background tint and left border come from the shared `_WeekGridPainter`
+    // behind the header row, so this cell only lays out its text.
+    return SizedBox(
       width: ganttCellWidth,
       height: ganttHeaderHeight,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: highlighted
-            ? theme.colors.primary.withValues(alpha: 0.14)
-            : null,
-        border: Border(left: BorderSide(color: theme.colors.border)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'W$week',
-            style: theme.typography.body.xs.copyWith(
-              color: highlighted
-                  ? theme.colors.primary
-                  : theme.colors.mutedForeground,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (start != null) ...[
-            const SizedBox(height: 2),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             Text(
-              formatDateShort(formatDate(start)),
+              'W$week',
               style: theme.typography.body.xs.copyWith(
-                fontSize: ganttHeaderCellFontSize,
-                color: theme.colors.mutedForeground,
+                color: highlighted
+                    ? theme.colors.primary
+                    : theme.colors.mutedForeground,
+                fontWeight: FontWeight.w600,
               ),
-              maxLines: 1,
-              softWrap: false,
             ),
+            if (start != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                formatDateShort(formatDate(start)),
+                style: theme.typography.body.xs.copyWith(
+                  fontSize: ganttHeaderCellFontSize,
+                  color: theme.colors.mutedForeground,
+                ),
+                maxLines: 1,
+                softWrap: false,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -390,22 +462,20 @@ class _ItemRow extends StatelessWidget {
               height: ganttRowHeight,
               child: Stack(
                 children: [
-                  Row(
-                    children: [
-                      for (var week = 1; week <= weekCount; week++)
-                        Container(
-                          width: ganttCellWidth,
-                          height: ganttRowHeight,
-                          decoration: BoxDecoration(
-                            color: week == currentWeek
-                                ? theme.colors.primary.withValues(alpha: 0.10)
-                                : null,
-                            border: Border(
-                              left: BorderSide(color: theme.colors.border),
-                            ),
-                          ),
+                  // One painter for the whole row's grid background, instead of
+                  // a decorated Container per week (the main scroll-jank source
+                  // on wide projects).
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _WeekGridPainter(
+                        weekCount: weekCount,
+                        currentWeek: currentWeek,
+                        borderColor: theme.colors.border,
+                        highlightColor: theme.colors.primary.withValues(
+                          alpha: 0.10,
                         ),
-                    ],
+                      ),
+                    ),
                   ),
                   if (item.isSeparator)
                     Positioned(

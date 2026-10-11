@@ -1,5 +1,5 @@
 name: personal_os_flutter
-description: "A new Flutter project."
+description: "Personal OS mobile client: todos, notes, links, work log and a week Gantt, with optional Turso sync."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -28,6 +28,21 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   drift_dev: ^2.35.1
   build_runner: ^2.16.2
+  flutter_native_splash: ^2.4.8
 
 flutter:
   uses-material-design: true
+
+# Native launch (splash) screen for Android and iOS. Regenerate after changing
+# the artwork with: dart run flutter_native_splash:create
+flutter_native_splash:
+  # Match the app's default ThemeMode.system: white in system light mode, the
+  # Forui neutral dark background (#0A0A0A) in system dark mode.
+  color: "#FFFFFF"
+  color_dark: "#0A0A0A"
+  # Sized for 4x density, so the icon displays at 128dp/pt, centred.
+  image: assets/branding/splash_icon.png
+  android_12:
+    # Android 12+ draws its own splash (the app icon within this background).
+    color: "#FFFFFF"
+    color_dark: "#0A0A0A"

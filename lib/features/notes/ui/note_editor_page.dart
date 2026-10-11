@@ -60,7 +60,10 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
 
   /// True while a title/content change is unsaved.
   bool _dirty = false;
-  _SaveStatus _status = _SaveStatus.idle;
+
+  /// The autosave indicator state, held in a notifier so status changes rebuild
+  /// only the small floating indicator, never the page or the text fields.
+  final ValueNotifier<_SaveStatus> _status = ValueNotifier(_SaveStatus.idle);
   Timer? _debounce;
 
   /// Monotonic id of the newest queued write. Only the newest write may mark
@@ -105,12 +108,16 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
     // here on (the widget is going away).
     _disposed = true;
     _debounce?.cancel();
-    // Skip the flush once autosave has given up: retries are exhausted, and
-    // although the repository outlives this widget, a failed state must not
-    // spawn a further attempt. A normal dirty edit still flushes here.
-    if (_dirty && _status != _SaveStatus.failed) unawaited(_persist());
+    // Passive teardown: the widget is being disposed from under the user (route
+    // teardown, hot reload), not an explicit back gesture. Skip the flush once
+    // autosave has given up, since retries are exhausted and a failed state
+    // must not spawn a further attempt here. A normal dirty edit still flushes.
+    // Explicit back navigation is handled by PopScope's _flush below, which
+    // intentionally keeps its last-chance attempt after "Not saved".
+    if (_dirty && _status.value != _SaveStatus.failed) unawaited(_persist());
     _titleController.dispose();
     _contentController.dispose();
+    _status.dispose();
     super.dispose();
   }
 
@@ -141,15 +148,22 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
     _saveFailures = 0;
     // Only "Saving..." and "Not saved" are visible (success stays silent), so
     // only clear those. Going saved/idle -> idle looks identical and must not
-    // rebuild mid-typing.
-    if (_status == _SaveStatus.saving || _status == _SaveStatus.failed) {
-      setState(() => _status = _SaveStatus.idle);
+    // rebuild mid-typing. Only the indicator listens to the notifier, so this
+    // never rebuilds the text fields or the rest of the page.
+    if (_status.value == _SaveStatus.saving ||
+        _status.value == _SaveStatus.failed) {
+      _status.value = _SaveStatus.idle;
     }
     _debounce?.cancel();
     _debounce = Timer(_autosaveDelay, () => unawaited(_persist()));
   }
 
   /// Cancels the debounce and persists any pending edit.
+  ///
+  /// Called from PopScope's `didPop`, i.e. an explicit user back-navigation.
+  /// Unlike the passive dispose path, this intentionally makes one last-chance
+  /// attempt even after autosave has reported "Not saved": the user asked to
+  /// leave, so a retry is warranted. This asymmetry with [dispose] is intended.
   Future<void> _flush() async {
     _debounce?.cancel();
     _debounce = null;
@@ -171,7 +185,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
     final title = _titleController.text.trim();
     final content = _contentController.text;
 
-    if (mounted && !_disposed) setState(() => _status = _SaveStatus.saving);
+    if (mounted && !_disposed) _status.value = _SaveStatus.saving;
 
     return _enqueue(
       () => _write(title.isEmpty ? null : title, content, generation),
@@ -207,7 +221,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
       // is still pending: an older completion must not flip the indicator to
       // "Saved" over text the debounce has not persisted yet.
       if (generation == _writeGeneration && !_dirty && mounted && !_disposed) {
-        setState(() => _status = _SaveStatus.saved);
+        _status.value = _SaveStatus.saved;
       }
     } catch (_) {
       // A stale failure is superseded by a newer write; only the current one
@@ -224,10 +238,10 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
       if (attempt >= _maxSaveAttempts) {
         // Retries exhausted: stop rescheduling and show a persistent unsaved
         // state instead of looping and toasting forever.
-        setState(() => _status = _SaveStatus.failed);
+        _status.value = _SaveStatus.failed;
         return;
       }
-      setState(() => _status = _SaveStatus.idle);
+      _status.value = _SaveStatus.idle;
       // Retry a transient failure without waiting for another keystroke.
       _debounce?.cancel();
       _debounce = Timer(_autosaveDelay, () => unawaited(_persist()));
@@ -463,13 +477,19 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
           ],
         ),
         // Floating status: overlaid so it never takes layout space. No gap
-        // when hidden, no shift when shown; success stays silent.
-        if (_status == _SaveStatus.saving || _status == _SaveStatus.failed)
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: IgnorePointer(child: _SaveIndicator(status: _status)),
+        // when hidden, no shift when shown; success stays silent. A
+        // ValueListenableBuilder rebuilds only this small badge when the save
+        // status changes, so typing and saving never rebuild the text fields.
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: IgnorePointer(
+            child: ValueListenableBuilder<_SaveStatus>(
+              valueListenable: _status,
+              builder: (context, status, _) => _SaveIndicator(status: status),
+            ),
           ),
+        ),
       ],
     );
   }

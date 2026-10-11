@@ -11,7 +11,7 @@ Mobile port of the Personal OS desktop app (Tauri/React, reference at ../persona
 | Navigation | 5 bottom tabs: Home, Todo, Notes, More, Settings. More hosts Links / Work Log / Projects as entries pushing onto the shell's inner Navigator (nested `Navigator` + `NavigatorPopHandler`) so the bottom bar stays visible |
 | Persistence (Phase 9) | drift, schema mirrors ../personal-os/src/lib/schema.ts (the remote Turso schema) column-for-column |
 | Sync (Phase 10) | Turso via libSQL HTTP API; bidirectional last-write-wins on updated_at; local DB is source of truth |
-| Tests | No broad suite. Targeted high-value tests only: clock/timestamp format, schema conformance vs schema.ts (node script), plus the Phase 2 Home stream-wiring widget test and the stream-combination test. Sync correctness is verified manually via cross-client checks (Flutter/desktop/TUI), not unit tests. Otherwise verification = flutter run / release APK + manual inspection; flutter analyze must stay clean |
+| Tests | No Dart test suite in this repo (per AGENTS.md, do not create one). The only automated check is the schema conformance script (tool/schema_conformance.js) vs schema.ts. Everything else is verified by running the app: flutter run / release APK + manual inspection; flutter analyze must stay clean. Sync correctness is verified manually via cross-client checks (Flutter/desktop/TUI) |
 | Theme | Follow system by default; manual System/Light/Dark toggle in Settings (persisted device-locally via shared_preferences, not synced) |
 
 ## Architecture
@@ -73,11 +73,10 @@ lib/
     projects/   ui/projects_page.dart, project_gantt.dart, work_item_dialog.dart  providers/
     more/       ui/more_page.dart
     settings/   ui/settings_page.dart    providers/
-test/                             # targeted tests: clock/timestamp, Home stream wiring, stream combination
-tool/                             # schema_conformance.js (diffs schema.ts vs tables.dart + the committed database.g.dart; the Phase 10 remote-DDL port diff activates once that port lands)
+tool/                             # schema_conformance.js (diffs schema.ts vs tables.dart, the committed database.g.dart, and the remote-DDL Dart port lib/core/sync/remote_schema.dart)
 ```
 
-Feature-first: each feature owns ui/ + providers/; shared code lives in core/. test/ holds only the targeted high-value tests (clock/timestamp, the Phase 2 Home stream-wiring and stream-combination tests); tool/schema_conformance.js is the automated schema-drift guard.
+Feature-first: each feature owns ui/ + providers/; shared code lives in core/. There is no Dart test suite in this repo (per AGENTS.md); tool/schema_conformance.js is the only automated check (the schema-drift guard).
 
 ## Data model (mirrors ../personal-os/src/lib/schema.ts)
 
@@ -143,7 +142,7 @@ The desktop app (personal-os) and terminal app (personal-os-tui) share one Turso
 - [x] Phase 8 - Enrichment: link metadata + persisted settings + empty states
 - [x] Phase 9 - Drift persistence
 - [x] Phase 10 - Turso sync
-- [ ] Phase 11 - Polish + APK
+- [x] Phase 11 - Polish + APK
 
 ## Phases
 
@@ -190,10 +189,10 @@ Scope:
 - core/data/in_memory_store.dart + core/data/mock/*: mock repositories seeded with realistic data (a week of todos across all 3 statuses, 3 notes, 5 links, 6 work log entries across 3 ISO weeks, 1 project with 3 phases and 8 work items).
 - Providers per repository (todoRepositoryProvider etc.).
 - utils/dates.dart: ISO week key + label helpers (reused by Work Log); utils/id.dart: uuid v4; utils/clock.dart: millisecond-precision ISO timestamp helper (see Turso compatibility contract).
-- Targeted test: clock.dart emits millisecond-precision UTC ISO strings with a Z suffix (no microseconds), so timestamp string comparison stays lexicographically correct.
+- clock.dart emits millisecond-precision UTC ISO strings with a Z suffix (no microseconds), so timestamp string comparison stays lexicographically correct.
 - Home dashboard: time-of-day greeting; Due today and Overdue todo sections; count cards per feature (tap jumps to the tab); Recent activity list (latest notes/links/work logs by updated_at); completing a todo from the dashboard allowed via checkbox.
 
-Done when: Home shows live counts and lists from mock data; toggling a todo on Home updates counts instantly (proves stream wiring); clock timestamp test passes; analyze clean.
+Done when: Home shows live counts and lists from mock data; toggling a todo on Home updates counts instantly (proves stream wiring); the clock helper emits millisecond-precision UTC timestamps; analyze clean.
 
 Deferred: feature screens, dashboard editing beyond the complete toggle.
 
@@ -285,7 +284,7 @@ Goal: mock data replaced by real local SQLite; UI untouched.
 
 Scope:
 - Add drift stack; core/data/drift/tables.dart mirrors ../personal-os/src/lib/schema.ts column-for-column (names, types, nullability, CHECK and UNIQUE constraints, foreign keys with ON DELETE CASCADE, defaults, indexes - see Turso compatibility contract: schema freeze). Diff tables.dart against schema.ts as a review step before proceeding (including FKs, cascade, indexes, and constraints, not just columns).
-- Schema conformance guard: a node script (tool/schema_conformance.js) parses REMOTE_SCHEMAS from ../personal-os/src/lib/schema.ts and diffs it against tables.dart and the committed database.g.dart (columns in order, types, nullability, defaults, CHECK/UNIQUE constraints, FKs/cascade, indexes with uniqueness). The Phase 10 remote-DDL Dart port is diffed too once that port lands; in Phase 9 the script logs and skips its absence. Run before every commit/merge; any drift fails the build.
+- Schema conformance guard: a node script (tool/schema_conformance.js) parses REMOTE_SCHEMAS from ../personal-os/src/lib/schema.ts and diffs it against tables.dart, the committed database.g.dart, and the Phase 10 remote-DDL Dart port (lib/core/sync/remote_schema.dart) - columns in order, types, nullability, defaults, CHECK/UNIQUE constraints, FKs/cascade, indexes with uniqueness. All three diffs are active now that the remote-DDL port has landed. Run before every commit/merge; any drift fails the build.
 - database.dart (AppDatabase, schema version 1 - fresh app, no legacy migrations).
 - DriftTodoRepository etc. implementing the same interfaces with drift queries and .watch() streams.
 - Swap provider bodies to drift impls (single localized diff); keep mock impls available for ProviderScope overrides (demos, widget previews).
@@ -331,7 +330,7 @@ Done when: release APK installs on the phone and all features work offline; sync
 - Turso sync, app mode, remote schema setup.
 - HTTP page-title fetch (until Phase 8), accounts, auth, multi-user.
 - Notifications, reminders, home-screen widgets, export/backup.
-- Broad automated test coverage and CI. (Targeted high-value tests for timestamp and schema conformance are in scope - see Tests decision and Phases 2/9.)
+- Broad automated test coverage and CI. (The schema conformance script is the only automated check here - see Tests decision.)
 - iOS-specific work (code must stay platform-agnostic; no Android-only APIs).
 
 ## Risks and notes
@@ -348,4 +347,4 @@ Done when: release APK installs on the phone and all features work offline; sync
 - InMemoryStore must use a broadcast StreamController; a single-subscription stream breaks the second listener (dashboard + feature page).
 - Tag edits are insert-only (delete all + re-insert on save) to match the reference schema and keep sync simple.
 - Offline tag and phase edits do not fully converge: tags are insert-only with no tombstones, so an offline tag edit (delete-all + re-insert) leaves stale tags that resurrect on pull; project_phases has no updated_at and no tombstone, and phase edits/deletes rely on immediate remote mirroring that is silently dropped offline. Matches the desktop app; treat tag and phase edits as best-effort when offline. Accepted decision: the schema freeze rules out adding tombstones/updated_at, so this parity is intended, not a gap.
-- No broad unit-test suite is deliberate; the targeted high-value areas get tests - clock/timestamp, schema conformance, Home stream wiring, and stream combination - and everything else is compensated with analyze-clean plus the per-phase Done-when checklist executed manually on every phase. Sync correctness is verified manually via the cross-client checks in Phase 10, not unit tests.
+- There is no Dart test suite in this repo (per AGENTS.md); the only automated check is the schema conformance script, and everything else is compensated with analyze-clean plus the per-phase Done-when checklist executed manually on every phase. Sync correctness is verified manually via the cross-client checks in Phase 10.
