@@ -99,7 +99,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
             children: [
               if (showSearch)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(22, 4, 22, 8),
                   child: FTextField(
                     control: FTextFieldControl.managed(
                       controller: _searchController,
@@ -130,7 +130,9 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                       const CenteredMessage('Could not load notes.'),
                   data: (items) {
                     // Extra bottom padding clears the floating add button.
-                    const padding = EdgeInsets.fromLTRB(16, 4, 16, 88);
+                    // 22 matches the nested header title inset so the cards
+                    // align with the title.
+                    const padding = EdgeInsets.fromLTRB(22, 4, 22, 88);
                     if (items.isEmpty) {
                       return ListView(
                         padding: padding,
@@ -153,7 +155,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
             ],
           ),
           Positioned(
-            right: 16,
+            right: 22,
             bottom: 16,
             child: FButton.icon(
               variant: .primary,

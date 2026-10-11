@@ -71,11 +71,11 @@ class HomePage extends ConsumerWidget {
       // own page padding on top (which would double the horizontal inset).
       childPad: false,
       header: FHeader(
-        // Align the header with the content, which is padded 16 horizontally.
+        // Align the header with the content, which is padded 22 horizontally.
         // The title uses the nested header's font size so it matches the Todo
         // and Notes screen titles.
         style: .delta(
-          padding: .value(EdgeInsets.fromLTRB(16, 8, 16, 0)),
+          padding: .value(EdgeInsets.fromLTRB(22, 8, 22, 0)),
           titleTextStyle: .delta(
             fontSize: context.theme.headerStyles.nested.titleTextStyle.fontSize,
           ),
@@ -83,7 +83,7 @@ class HomePage extends ConsumerWidget {
         title: Text(_greeting(DateTime.now())),
       ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+        padding: const EdgeInsets.fromLTRB(22, 0, 22, 32),
         children: [
           SummaryLine(overdue: overdue.length, dueToday: dueToday.length),
           if (dueToday.isNotEmpty) ...[

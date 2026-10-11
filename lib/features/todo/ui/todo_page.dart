@@ -87,7 +87,7 @@ class TodoPage extends ConsumerWidget {
             children: [
               if (showSearch)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(22, 4, 22, 8),
                   child: FTextField(
                     control: FTextFieldControl.managed(
                       onChange: (value) => ref
@@ -120,7 +120,7 @@ class TodoPage extends ConsumerWidget {
           // The archived view is read-only, so the add button is hidden there.
           if (!showArchived)
             Positioned(
-              right: 16,
+              right: 22,
               bottom: 16,
               child: FButton.icon(
                 variant: .primary,

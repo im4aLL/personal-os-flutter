@@ -246,7 +246,7 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
       children: [
         ListView(
           // Extra bottom padding clears the floating add button.
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
+          padding: const EdgeInsets.fromLTRB(22, 4, 22, 88),
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -395,7 +395,7 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
           ],
         ),
         Positioned(
-          right: 16,
+          right: 22,
           bottom: 16,
           child: FButton.icon(
             variant: .primary,

@@ -239,26 +239,31 @@ class TodoCard extends ConsumerWidget {
                 ],
               ),
             ),
+            // The trailing offset shifts the button right so its optical edge
+            // sits near the card border instead of the content inset. The menu
+            // is a 40px tap target but must not dictate the card's height: with
+            // a title-only todo, a 40px box would leave a line of dead space
+            // below the title. `heightFactor: 0.5` reserves only ~half the
+            // button in layout (about a title line) and paints the whole button
+            // centered on it, so the overflow spills into the card's 10px
+            // vertical padding instead of growing the card. A title-only card
+            // then reads as tall as a note card and the title is vertically
+            // centered on the button.
             Transform.translate(
-              // Tighten the ghost icon button so its optical edge sits near the
-              // card content's top-right: the md touch icon button is a 44px box
-              // with all(13) padding, so without this the 18px icon sits
-              // 13px inside the button (25/23 from the card border given the
-              // card's 12/10 padding). The delta below keeps a 40px tap target
-              // with symmetric all(11) padding, and this shift pulls the whole
-              // 40px box 8px up/right, leaving the hover background 4px/2px
-              // inside the card border.
-              offset: const Offset(8, -8),
-              child: FButton.icon(
-                variant: .ghost,
-                style: const .delta(
-                  iconContentStyle: .delta(
-                    padding: .value(EdgeInsets.all(11)),
-                    constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+              offset: const Offset(8, 0),
+              child: Align(
+                heightFactor: 0.5,
+                child: FButton.icon(
+                  variant: .ghost,
+                  style: const .delta(
+                    iconContentStyle: .delta(
+                      padding: .value(EdgeInsets.all(11)),
+                      constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+                    ),
                   ),
+                  onPress: () => _openMenu(context, ref),
+                  child: const Icon(Icons.more_vert),
                 ),
-                onPress: () => _openMenu(context, ref),
-                child: const Icon(Icons.more_vert),
               ),
             ),
           ],

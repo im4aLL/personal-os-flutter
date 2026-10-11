@@ -16,9 +16,10 @@ class TodoStatusTabs extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The whole tabs block (bar + content) sits in the 16px content gutter.
+    // The whole tabs block (bar + content) sits in the 22px content gutter,
+    // which matches the nested header title inset.
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 22),
       child: FTabs(
         expands: true,
         children: [

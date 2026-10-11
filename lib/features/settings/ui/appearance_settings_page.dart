@@ -13,7 +13,7 @@ class AppearanceSettingsPage extends ConsumerWidget {
     return FScaffold(
       // The list owns the content padding, so the scaffold must not add its
       // own page padding on top (which would use a smaller 12 inset than the
-      // other pages' 16).
+      // other pages' 22).
       childPad: false,
       // Nested (not root) so the header style matches the other pages;
       // `centerStart` keeps the title left-aligned.
@@ -28,7 +28,7 @@ class AppearanceSettingsPage extends ConsumerWidget {
         title: const Text('Appearance'),
       ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        padding: const EdgeInsets.fromLTRB(22, 4, 22, 32),
         children: [
           FTileGroup(
             label: const Text('Theme'),

@@ -25,6 +25,9 @@ class TodoDetailPage extends ConsumerWidget {
     final asyncTodo = ref.watch(todoByIdProvider(todoId));
 
     return FScaffold(
+      // The list owns the content padding, so the scaffold must not add its
+      // own page padding on top (which would double the horizontal inset).
+      childPad: false,
       header: FHeader.nested(
         prefixes: [
           FHeaderAction(
@@ -83,7 +86,7 @@ class _TodoDetail extends ConsumerWidget {
         !completed && dueDate != null && dueDate.compareTo(todayDate()) < 0;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+      padding: const EdgeInsets.fromLTRB(22, 4, 22, 32),
       children: [
         Wrap(
           spacing: 8,

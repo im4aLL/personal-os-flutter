@@ -49,7 +49,7 @@ class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
     return FScaffold(
       // The list owns the content padding, so the scaffold must not add its
       // own page padding on top (which would use a smaller 12 inset than the
-      // other pages' 16).
+      // other pages' 22).
       childPad: false,
       // Nested (not root) so the header style matches the other pages;
       // `centerStart` keeps the title left-aligned.
@@ -64,7 +64,7 @@ class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
         title: const Text('Sync'),
       ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        padding: const EdgeInsets.fromLTRB(22, 4, 22, 32),
         children: [
           FTileGroup(
             label: const Text('Mode'),
@@ -93,7 +93,7 @@ class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
               label: const Text('Connection'),
               children: [
                 _fieldTile(
-                  child: FTextFormField(
+                  FTextFormField(
                     control: FTextFieldControl.managed(
                       controller: _urlController,
                     ),
@@ -103,8 +103,7 @@ class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
                   ),
                 ),
                 _fieldTile(
-                  top: 0,
-                  child: FTextFormField.password(
+                  FTextFormField.password(
                     control: FTextFieldControl.managed(
                       controller: _tokenController,
                     ),
@@ -114,8 +113,7 @@ class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
                   ),
                 ),
                 _fieldTile(
-                  top: 0,
-                  child: Row(
+                  Row(
                     children: [
                       Expanded(
                         child: FButton(
@@ -189,9 +187,10 @@ class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
   }
 
   /// Wraps a non-tile control so it can live inside the tile group.
-  FTile _fieldTile({required Widget child, double top = 12}) => FTile.raw(
-    child: Padding(padding: EdgeInsets.fromLTRB(16, top, 16, 12), child: child),
-  );
+  ///
+  /// The tile's built-in content padding is left untouched so the fields line
+  /// up with the surrounding tiles instead of being double-inset.
+  FTile _fieldTile(Widget child) => FTile.raw(child: child);
 
   Widget _syncButtonChild(bool syncing) {
     if (!syncing) return const Text('Sync now');

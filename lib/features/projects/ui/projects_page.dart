@@ -57,7 +57,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
         data: (projects) {
           if (projects.isEmpty) {
             return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
+              padding: const EdgeInsets.fromLTRB(22, 4, 22, 88),
               children: const [
                 AppEmptyState('No projects yet. Tap + to add one.'),
               ],
@@ -65,7 +65,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
           }
           return ListView.builder(
             // Extra bottom padding clears the floating add button.
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
+            padding: const EdgeInsets.fromLTRB(22, 4, 22, 88),
             itemCount: projects.length,
             itemBuilder: (context, index) => Padding(
               padding: const EdgeInsets.only(bottom: 8),

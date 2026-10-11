@@ -89,7 +89,7 @@ class _WorkLogPageState extends ConsumerState<WorkLogPage> {
             children: [
               if (filter.showSearch)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(22, 4, 22, 8),
                   child: FTextField(
                     control: FTextFieldControl.managed(
                       controller: _searchController,
@@ -120,7 +120,7 @@ class _WorkLogPageState extends ConsumerState<WorkLogPage> {
                   ),
                 ),
               const Padding(
-                padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                padding: EdgeInsets.fromLTRB(22, 4, 22, 8),
                 child: _PresetTabs(),
               ),
               Expanded(
@@ -131,7 +131,7 @@ class _WorkLogPageState extends ConsumerState<WorkLogPage> {
                       const CenteredMessage('Could not load work logs.'),
                   data: (items) => ListView(
                     // Extra bottom padding clears the floating add button.
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
+                    padding: const EdgeInsets.fromLTRB(22, 4, 22, 88),
                     children: [
                       if (items.isEmpty)
                         AppEmptyState(_emptyMessage(filter))
@@ -144,7 +144,7 @@ class _WorkLogPageState extends ConsumerState<WorkLogPage> {
             ],
           ),
           Positioned(
-            right: 16,
+            right: 22,
             bottom: 16,
             child: FButton.icon(
               variant: .primary,

@@ -19,7 +19,7 @@ class SettingsPage extends ConsumerWidget {
     return FScaffold(
       // The list owns the content padding, so the scaffold must not add its
       // own page padding on top (which would use a smaller 12 inset than the
-      // other tab pages' 16).
+      // other tab pages' 22).
       childPad: false,
       // Nested (not root) so the title font matches the other tab pages;
       // `centerStart` keeps the title left-aligned.
@@ -28,7 +28,9 @@ class SettingsPage extends ConsumerWidget {
         title: Text('Settings'),
       ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        // 22 matches the nested header title inset (12 page padding + 10 title
+        // padding), so the tile group aligns with the title.
+        padding: const EdgeInsets.fromLTRB(22, 4, 22, 32),
         children: [
           FTileGroup(
             label: const Text('Preferences'),

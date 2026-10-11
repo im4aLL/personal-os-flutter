@@ -24,7 +24,9 @@ class ArchivedTodoList extends ConsumerWidget {
       loading: () => const Center(child: FCircularProgress()),
       error: (_, _) => const CenteredMessage('Could not load archived todos.'),
       data: (items) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        // 22 matches the nested header title inset so the cards align with the
+        // title.
+        padding: const EdgeInsets.fromLTRB(22, 4, 22, 32),
         children: [
           if (items.isEmpty)
             AppEmptyState(

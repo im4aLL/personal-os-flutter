@@ -365,6 +365,9 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
         if (didPop) unawaited(_flush());
       },
       child: FScaffold(
+        // The body owns the content padding, so the scaffold must not add its
+        // own page padding on top (which would double the horizontal inset).
+        childPad: false,
         header: FHeader.nested(
           prefixes: [
             FHeaderAction(
@@ -453,7 +456,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
           children: [
             if (!_preview)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                padding: const EdgeInsets.fromLTRB(22, 4, 22, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -481,7 +484,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
         // ValueListenableBuilder rebuilds only this small badge when the save
         // status changes, so typing and saving never rebuild the text fields.
         Positioned(
-          right: 16,
+          right: 22,
           bottom: 16,
           child: IgnorePointer(
             child: ValueListenableBuilder<_SaveStatus>(
@@ -496,7 +499,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
 
   Widget _buildEditor() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
       child: FTextField(
         control: FTextFieldControl.managed(
           controller: _contentController,
@@ -530,7 +533,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
     final title = _titleController.text.trim();
     final colors = context.theme.colors;
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
