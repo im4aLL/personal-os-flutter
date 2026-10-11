@@ -1,7 +1,7 @@
 name: personal_os_flutter
 description: "Personal OS mobile client: todos, notes, links, work log and a week Gantt, with optional Turso sync."
 publish_to: 'none'
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: ^3.13.5
