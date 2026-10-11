@@ -54,7 +54,7 @@ class MockTodoRepository implements TodoRepository {
       status: status,
       priority: priority,
       dueDate: dueDate,
-      position: position ?? _nextPositionFor(status),
+      position: position ?? _topPositionFor(status),
       createdAt: now,
       updatedAt: now,
     );
@@ -78,7 +78,7 @@ class MockTodoRepository implements TodoRepository {
   Future<void> setStatus(String id, TodoStatus status) async {
     final index = _store.snapshot.indexWhere((todo) => todo.id == id);
     if (index == -1 || _store.snapshot[index].status == status) return;
-    final position = _nextPositionFor(status);
+    final position = _topPositionFor(status);
     _mutate(id, (todo) => todo.copyWith(status: status, position: position));
   }
 
@@ -121,15 +121,16 @@ class MockTodoRepository implements TodoRepository {
     });
   }
 
-  /// One past the largest [position] among non-archived [status] todos, so an
-  /// appended todo lands after every existing sibling (0 when none exist).
-  int _nextPositionFor(TodoStatus status) {
-    var max = -1;
+  /// One below the smallest [position] among non-archived [status] todos, so a
+  /// newly created or promoted todo lands before every existing sibling (0 when
+  /// none exist).
+  int _topPositionFor(TodoStatus status) {
+    int? min;
     for (final todo in _store.snapshot) {
       if (todo.archived || todo.status != status) continue;
-      if (todo.position > max) max = todo.position;
+      if (min == null || todo.position < min) min = todo.position;
     }
-    return max + 1;
+    return min == null ? 0 : min - 1;
   }
 
   static List<Todo> _sorted(Iterable<Todo> items) {

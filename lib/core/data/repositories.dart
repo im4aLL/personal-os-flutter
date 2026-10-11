@@ -25,9 +25,9 @@ abstract interface class TodoRepository {
 
   /// Creates a todo with a new id and timestamps.
   ///
-  /// Positions are scoped per status: an omitted [position] appends to the end
-  /// of [status] (one past the current maximum), so a new todo never collides
-  /// with a position left behind by a reorder.
+  /// Positions are scoped per status: an omitted [position] puts the todo on
+  /// top of [status] (one below the current minimum), so a new todo appears
+  /// first and never collides with a position left behind by a reorder.
   Future<Todo> create({
     required String title,
     String? description,
@@ -42,8 +42,8 @@ abstract interface class TodoRepository {
 
   /// Sets the status of the todo with [id].
   ///
-  /// Moving to a different status appends the todo to the end of the
-  /// destination status. It is a no-op when the status already matches.
+  /// Moving to a different status puts the todo on top of the destination
+  /// status. It is a no-op when the status already matches.
   Future<void> setStatus(String id, TodoStatus status);
 
   /// Soft-deletes (archives) the todo with [id].

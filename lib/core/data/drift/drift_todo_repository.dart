@@ -75,9 +75,9 @@ class DriftTodoRepository implements TodoRepository {
         status: status,
         priority: priority,
         dueDate: dueDate,
-        // Read inside the transaction so a concurrent append cannot observe
-        // the same max position.
-        position: position ?? await _nextPositionFor(status),
+        // Read inside the transaction so a concurrent promotion cannot observe
+        // the same min position.
+        position: position ?? await _topPositionFor(status),
         createdAt: now,
         updatedAt: now,
       );
@@ -146,7 +146,7 @@ class DriftTodoRepository implements TodoRepository {
                 ..where((t) => t.id.equals(id)))
               .getSingleOrNull();
       if (row == null || row.status == status.wire) return;
-      final position = await _nextPositionFor(status);
+      final position = await _topPositionFor(status);
       await (_database.update(_database.todos)..where((t) => t.id.equals(id)))
           .write(
             TodosCompanion(
@@ -210,18 +210,20 @@ class DriftTodoRepository implements TodoRepository {
     });
   }
 
-  /// One past the largest [position] among non-archived [status] todos, so an
-  /// appended todo lands after every existing sibling (0 when none exist).
-  Future<int> _nextPositionFor(TodoStatus status) async {
-    final maxPosition = _database.todos.position.max();
+  /// One below the smallest [position] among non-archived [status] todos, so a
+  /// newly created or promoted todo lands before every existing sibling (0 when
+  /// none exist).
+  Future<int> _topPositionFor(TodoStatus status) async {
+    final minPosition = _database.todos.position.min();
     final query = _database.selectOnly(_database.todos)
-      ..addColumns([maxPosition])
+      ..addColumns([minPosition])
       ..where(
         _database.todos.status.equals(status.wire) &
             _database.todos.archived.equals(0),
       );
     final row = await query.getSingle();
-    return (row.read(maxPosition) ?? -1) + 1;
+    final min = row.read(minPosition);
+    return min == null ? 0 : min - 1;
   }
 
   Future<void> _touch(String id, TodosCompanion companion) async {
